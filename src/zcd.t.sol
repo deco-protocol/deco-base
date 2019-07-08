@@ -2,13 +2,12 @@ pragma solidity ^0.5.6;
 
 import "ds-test/test.sol";
 
-import "./Zcd.sol";
+import "./dsr.sol";
+import "./zcd.sol";
 
-contract ZcdTest is DSTest {
-    Zcd zcd;
+contract ZCDTest is DSTest {
 
     function setUp() public {
-        zcd = new Zcd();
     }
 
     function testFail_basic_sanity() public {
