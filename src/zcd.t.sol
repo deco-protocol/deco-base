@@ -2,7 +2,7 @@ pragma solidity ^0.5.6;
 
 import "ds-test/test.sol";
 
-import "./dsr.sol";
+import "./dcp.sol";
 import "./zcd.sol";
 
 contract ZCDTest is DSTest {

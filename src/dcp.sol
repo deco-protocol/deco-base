@@ -35,7 +35,7 @@ contract PotLike {
     function exit(uint wad) public;
 }
 
-contract DSR {
+contract DCP {
     // --- Auth ---
     mapping (address => uint) public wards;
     function rely(address guy) public auth { wards[guy] = 1; }
@@ -51,8 +51,8 @@ contract DSR {
     mapping (address => uint) settledChi;
 
     // --- ERC20 Data ---
-    string  public constant name     = "DSR Token";
-    string  public constant symbol   = "DSR";
+    string  public constant name     = "Dai Coupon Payment";
+    string  public constant symbol   = "DCP";
     string  public constant version  = "1";
     uint8   public constant decimals = 18;
     uint256 public totalSupply;
@@ -105,14 +105,14 @@ contract DSR {
     function transferFrom(address src, address dst, uint wad)
         public returns (bool)
     {
-        require(balanceOf[src] >= wad, "dsr/insufficient-balance");
+        require(balanceOf[src] >= wad, "dcp/insufficient-balance");
 
         // Claim accumulated savings on addresses before settledChi is reset
         claim(src);
         claim(dst);
 
         if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
-            require(allowance[src][msg.sender] >= wad, "dsr/insufficient-allowance");
+            require(allowance[src][msg.sender] >= wad, "dcp/insufficient-allowance");
             allowance[src][msg.sender] = sub(allowance[src][msg.sender], wad);
         }
         balanceOf[src] = sub(balanceOf[src], wad);
@@ -126,9 +126,9 @@ contract DSR {
         emit Transfer(address(0), usr, wad);
     }
     function burn(address usr, uint wad) internal {
-        require(balanceOf[usr] >= wad, "dsr/insufficient-balance");
+        require(balanceOf[usr] >= wad, "dcp/insufficient-balance");
         if (usr != msg.sender && allowance[usr][msg.sender] != uint(-1)) {
-            require(allowance[usr][msg.sender] >= wad, "dsr/insufficient-allowance");
+            require(allowance[usr][msg.sender] >= wad, "dcp/insufficient-allowance");
             allowance[usr][msg.sender] = sub(allowance[usr][msg.sender], wad);
         }
         balanceOf[usr] = sub(balanceOf[usr], wad);
@@ -175,7 +175,7 @@ contract DSR {
         emit Approval(holder, spender, wad);
     }
 
-    // Lock Dai and issue DSR and ZCD tokens
+    // Lock Dai and issue DCP and ZCD tokens
     function split(uint wad) public {
         uint depositAmt = mul(pot.chi(), wad);
 
@@ -191,7 +191,7 @@ contract DSR {
         zcd.mint(msg.sender, depositAmt);
     }
 
-    // Redeem equal amount of DSR and ZCD tokens to unlock Dai
+    // Redeem equal amount of DCP and ZCD tokens to unlock Dai
     function merge(uint wad) public {
         uint withdrawAmt = mul(pot.chi(), wad);
 
