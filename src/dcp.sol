@@ -43,12 +43,17 @@ contract DCP {
     modifier auth { require(wards[msg.sender] == 1); _; }
 
     // Contract addresses
-    TokenLike dai;
-    AdapterLike adapter;
-    PotLike pot;
-    ZCD zcd;
+    TokenLike public dai;
+    AdapterLike public adapter;
+    PotLike public pot;
+    ZCD public zcd;
 
     mapping (address => uint) settledChi;
+
+    // mapping hash to balance
+    mapping (bytes32 => uint) balance;
+    
+    // mapping hash to address, start, end
 
     // --- ERC20 Data ---
     string  public constant name     = "Dai Coupon Payment";
@@ -177,6 +182,8 @@ contract DCP {
 
     // Lock Dai and issue DCP and ZCD tokens
     function split(uint wad) public {
+        // zcd dcp split issues to current address, current time, uint -1 end
+
         uint depositAmt = mul(pot.chi(), wad);
 
         // Claim accumulated savings dai before changing balances
@@ -193,6 +200,8 @@ contract DCP {
 
     // Redeem equal amount of DCP and ZCD tokens to unlock Dai
     function merge(uint wad) public {
+        // zcd dcp merge needs owner, start less than current, end uint -1
+
         uint withdrawAmt = mul(pot.chi(), wad);
 
         // Claim accumulated savings dai before changing balances
@@ -207,8 +216,14 @@ contract DCP {
         require(dai.transferFrom(msg.sender, address(this), withdrawAmt));
     }
 
+    // time split and merge
+    // splits issues the rate swap by creating two dcp tokens at a time
+
+
     // Deposit Dai accumulated as savings on input address
     function claim(address usr) public {
+        // dcp claim checks hash ownership
+
         uint chi_ = pot.chi();
 
         if (!(settledChi[usr] == 0 || balanceOf[usr] == 0)) {
@@ -223,4 +238,7 @@ contract DCP {
     }
 
     // handle emergency shutdown
+
+    // dcp is only transferred between hashes
+    // address transfer convenience methods
 }
