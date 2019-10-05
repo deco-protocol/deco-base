@@ -1,21 +1,6 @@
-// Copyright (C) 2017, 2018, 2019 dbrock, rain, mrchico
+pragma solidity ^0.5.10;
 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
-pragma solidity >=0.4.24;
-
-import "./zcd.sol";
+import {ZCD} from "./zcd.sol";
 
 contract TokenLike {
     function mint(address usr, uint wad) public;
@@ -36,38 +21,25 @@ contract PotLike {
 }
 
 contract DCP {
-    // --- Auth ---
+// --- Auth ---
     mapping (address => uint) public wards;
-    function rely(address guy) public auth { wards[guy] = 1; }
-    function deny(address guy) public auth { wards[guy] = 0; }
+    function rely(address usr) external auth { wards[usr] = 1; }
+    function deny(address usr) external auth { wards[usr] = 0; }
     modifier auth { require(wards[msg.sender] == 1); _; }
 
-    // Contract addresses
-    TokenLike public dai;
-    AdapterLike public adapter;
-    PotLike public pot;
-    ZCD public zcd;
+    mapping(address => mapping (address => uint)) public can;
+    function hope(address usr) external { can[msg.sender][usr] = 1; }
+    function nope(address usr) external { can[msg.sender][usr] = 0; }
+    function wish(address bit, address usr) internal view returns (bool) {
+        return either(bit == usr, can[bit][usr] == 1);
+    }
 
-    mapping (address => uint) settledChi;
-
-    // mapping hash to balance
-    mapping (bytes32 => uint) balance;
-    
-    // mapping hash to address, start, end
-
-    // --- ERC20 Data ---
-    string  public constant name     = "Dai Coupon Payment";
-    string  public constant symbol   = "DCP";
-    string  public constant version  = "1";
-    uint8   public constant decimals = 18;
-    uint256 public totalSupply;
-
-    mapping (address => uint)                      public balanceOf;
-    mapping (address => mapping (address => uint)) public allowance;
-    mapping (address => uint)                      public nonces;
-
-    event Approval(address indexed src, address indexed guy, uint wad);
-    event Transfer(address indexed src, address indexed dst, uint wad);
+    function either(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := or(x, y)}
+    }
+    function both(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := and(x, y)}
+    }
 
     // --- Math ---
     function add(uint x, uint y) internal pure returns (uint z) {
@@ -79,166 +51,155 @@ contract DCP {
     function mul(uint x, uint y) internal pure returns (uint z) {
         require(y == 0 || (z = x * y) / y == x);
     }
+    // Contract addresses
+    TokenLike public dai;
+    AdapterLike public adapter;
+    PotLike public pot;
+    ZCD public zcd;
 
-    // --- EIP712 niceties ---
-    bytes32 public DOMAIN_SEPARATOR;
-    bytes32 public constant PERMIT_TYPEHASH = keccak256(
-        "Permit(address holder,address spender,uint256 nonce,uint256 expiry,bool allowed)"
-    );
-
-    constructor(address dai_, address adapter_, address pot_, uint256 chainId_) public {
+    constructor(address dai_, address adapter_, address pot_, address zcd_) public {
         wards[msg.sender] = 1;
-        DOMAIN_SEPARATOR = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256(bytes(name)),
-            keccak256(bytes(version)),
-            chainId_,
-            address(this)
-        ));
 
         dai = TokenLike(dai_);
         adapter = AdapterLike(adapter_);
         pot = PotLike(pot_);
-
-        zcd = new ZCD(chainId_);
+        zcd = ZCD(zcd_);
     }
 
-    // --- Token ---
-    function transfer(address dst, uint wad) public returns (bool) {
-        return transferFrom(msg.sender, dst, wad);
+    struct Terms {
+        address owner;
+        uint256 start;
+        uint256 end;
     }
-    function transferFrom(address src, address dst, uint wad)
-        public returns (bool)
+
+    mapping (bytes32 => Terms) public terms;
+    mapping (bytes32 => uint256) public dcp;
+    mapping (bytes32 => uint256) public lastChi;
+    mapping (uint256 => uint256) public snapshotChi;
+
+    event Move(address src, address dst, uint start, uint256 end, uint256 wad);
+
+    function move( 
+        address src, 
+        address dst, 
+        uint256 start, 
+        uint256 end, 
+        uint256 wad
+    ) 
+        external 
+        returns (bool)
     {
-        require(balanceOf[src] >= wad, "dcp/insufficient-balance");
+        require(wish(src, msg.sender));
 
-        // Claim accumulated savings on addresses before settledChi is reset
-        claim(src);
-        claim(dst);
+        bytes32 srcTerms = keccak256(abi.encodePacked(src, start, end));
+        bytes32 dstTerms = keccak256(abi.encodePacked(dst, start, end));
 
-        if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
-            require(allowance[src][msg.sender] >= wad, "dcp/insufficient-allowance");
-            allowance[src][msg.sender] = sub(allowance[src][msg.sender], wad);
-        }
-        balanceOf[src] = sub(balanceOf[src], wad);
-        balanceOf[dst] = add(balanceOf[dst], wad);
-        emit Transfer(src, dst, wad);
-        return true;
-    }
-    function mint(address usr, uint wad) internal {
-        balanceOf[usr] = add(balanceOf[usr], wad);
-        totalSupply    = add(totalSupply, wad);
-        emit Transfer(address(0), usr, wad);
-    }
-    function burn(address usr, uint wad) internal {
-        require(balanceOf[usr] >= wad, "dcp/insufficient-balance");
-        if (usr != msg.sender && allowance[usr][msg.sender] != uint(-1)) {
-            require(allowance[usr][msg.sender] >= wad, "dcp/insufficient-allowance");
-            allowance[usr][msg.sender] = sub(allowance[usr][msg.sender], wad);
-        }
-        balanceOf[usr] = sub(balanceOf[usr], wad);
-        totalSupply    = sub(totalSupply, wad);
-        emit Transfer(usr, address(0), wad);
-    }
-    function approve(address usr, uint wad) public returns (bool) {
-        allowance[msg.sender][usr] = wad;
-        emit Approval(msg.sender, usr, wad);
+        require(dcp[srcTerms] >= wad, "dcp/insufficient-balance");
+
+        claim(srcTerms);
+        claim(dstTerms);
+
+        dcp[srcTerms] = sub(dcp[srcTerms], wad);
+        dcp[dstTerms] = add(dcp[dstTerms], wad);
+
+        emit Move(src, dst, start, end, wad);
         return true;
     }
 
-    // --- Alias ---
-    function push(address usr, uint wad) public {
-        transferFrom(msg.sender, usr, wad);
-    }
-    function pull(address usr, uint wad) public {
-        transferFrom(usr, msg.sender, wad);
-    }
-    function move(address src, address dst, uint wad) public {
-        transferFrom(src, dst, wad);
-    }
+    function mint(address usr, uint256 start, uint256 end, uint256 wad) public auth {
+        bytes32 usrTerms = keccak256(abi.encodePacked(usr, start, end));
 
-    // --- Approve by signature ---
-    function permit(address holder, address spender, uint256 nonce, uint256 expiry,
-                    bool allowed, uint8 v, bytes32 r, bytes32 s) public
-    {
-        bytes32 digest =
-            keccak256(abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(abi.encode(PERMIT_TYPEHASH,
-                                     holder,
-                                     spender,
-                                     nonce,
-                                     expiry,
-                                     allowed))
-        ));
-        require(holder == ecrecover(digest, v, r, s), "invalid permit");
-        require(expiry == 0 || now <= expiry, "permit expired");
-        require(nonce == nonces[holder]++, "invalid nonce");
-        uint wad = allowed ? uint(-1) : 0;
-        allowance[holder][spender] = wad;
-        emit Approval(holder, spender, wad);
+        terms[usrTerms].owner = usr;
+        terms[usrTerms].start = start;
+        terms[usrTerms].end = end;
+
+        dcp[usrTerms] = add(dcp[usrTerms], wad);
+        emit Move(address(0), usr, start, end, wad);
     }
 
-    // Lock Dai and issue DCP and ZCD tokens
-    function split(uint wad) public {
-        // zcd dcp split issues to current address, current time, uint -1 end
+    function burn(address usr, uint256 start, uint256 end, uint256 wad) public auth {
+        bytes32 usrTerms = keccak256(abi.encodePacked(usr, start, end));
 
-        uint depositAmt = mul(pot.chi(), wad);
+        require(dcp[usrTerms] >= wad, "dcp/insufficient-balance");
 
-        // Claim accumulated savings dai before changing balances
-        claim(msg.sender);
-
-        // Transfer and lock Dai in savings mode
-        require(dai.transferFrom(msg.sender, address(this), depositAmt));
-        adapter.join(address(this), depositAmt);
-        pot.join(wad);
-
-        mint(msg.sender, depositAmt);
-        zcd.mint(msg.sender, depositAmt);
+        dcp[usrTerms] = sub(dcp[usrTerms], wad);
+        emit Move(usr, address(0), start, end, wad);
     }
 
-    // Redeem equal amount of DCP and ZCD tokens to unlock Dai
-    function merge(uint wad) public {
-        // zcd dcp merge needs owner, start less than current, end uint -1
-
-        uint withdrawAmt = mul(pot.chi(), wad);
-
-        // Claim accumulated savings dai before changing balances
-        claim(msg.sender);
-
-        burn(msg.sender, withdrawAmt);
-        zcd.burn(msg.sender, withdrawAmt);
-
-        // Remove Dai from savings mode and transfer to user
-        pot.exit(wad);
-        adapter.exit(msg.sender, withdrawAmt);
-        require(dai.transferFrom(msg.sender, address(this), withdrawAmt));
-    }
-
-    // time split and merge
-    // splits issues the rate swap by creating two dcp tokens at a time
-
-
-    // Deposit Dai accumulated as savings on input address
-    function claim(address usr) public {
-        // dcp claim checks hash ownership
-
+    // snapshot chi to process future claim payments
+    function snapshot() public {
+        pot.drip();
         uint chi_ = pot.chi();
+        snapshotChi[now] = chi_;
+    }
 
-        if (!(settledChi[usr] == 0 || balanceOf[usr] == 0)) {
-            uint daiBalance = mul(balanceOf[usr], sub(chi_, settledChi[usr]));
+    // claim coupon payments
+    function claim(bytes32 usrTerms, uint256 time) public {
+        address usr = terms[usrTerms].owner;
+        uint256 start = terms[usrTerms].start;
+        uint256 end = terms[usrTerms].end;
+
+        require(start <= time && time <= end);
+
+        uint chi_ = snapshotChi[time];
+        require(chi_ > lastChi[usrTerms]);
+
+        if (!(lastChi[usrTerms] == 0 || lastChi[usrTerms] == 0)) {
+            uint daiBalance = mul(lastChi[usrTerms], sub(chi_, lastChi[usrTerms]));
 
             pot.exit(daiBalance / chi_);
             adapter.exit(usr, daiBalance);
-            require(dai.transferFrom(address(this), usr, daiBalance));
+            require(dai.transferFrom(address(zcd), usr, daiBalance));
         }
 
-        settledChi[usr] = chi_;
+        lastChi[usrTerms] = chi_;
     }
 
-    // handle emergency shutdown
+    // claim coupon payments now
+    function claim(bytes32 usrTerms) public {
+        snapshot();
+        claim(usrTerms, now);
+    }
 
-    // dcp is only transferred between hashes
-    // address transfer convenience methods
+    // split one DCP bond into two
+    function split(bytes32 usrTerms, uint256 mid, uint256 wad) public {
+        address usr = terms[usrTerms].owner;
+        uint256 start = terms[usrTerms].start;
+        uint256 end = terms[usrTerms].end;
+
+        require(wish(usr, msg.sender));
+
+        claim(usrTerms);
+
+        require(start > mid && mid > end);
+
+        burn(usr, start, end, wad);
+
+        mint(usr, start, mid, wad);
+        mint(usr, mid+1, end, wad);
+    }
+
+    // merge two DCP bonds into one
+    function merge(bytes32 usrTerms1, bytes32 usrTerms2, uint256 wad) public {
+        address usr1 = terms[usrTerms1].owner;
+        uint256 start1 = terms[usrTerms1].start;
+        uint256 end1 = terms[usrTerms1].end;
+
+        address usr2 = terms[usrTerms2].owner;
+        uint256 start2 = terms[usrTerms2].start;
+        uint256 end2 = terms[usrTerms2].end;
+
+        require(wish(usr1, msg.sender));
+        require(wish(usr2, msg.sender));
+
+        require(end1+1 == start2);
+
+        claim(usrTerms1);
+        claim(usrTerms2);
+
+        burn(usr1, start1, end1, wad);
+        burn(usr2, start2, end2, wad);
+
+        mint(usr1, start1, end2, wad);
+    }
 }

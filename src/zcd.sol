@@ -1,40 +1,47 @@
-// Copyright (C) 2017, 2018, 2019 dbrock, rain, mrchico
+pragma solidity ^0.5.10;
+// pragma experimental ABIEncoderV2;
 
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Affero General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+import {DCP} from "./dcp.sol";
 
-pragma solidity >=0.4.24;
+contract TokenLike {
+    function transferFrom(address src, address dst, uint wad) public returns (bool);
+    function approve(address usr, uint wad) external returns (bool);
+}
+
+contract AdapterLike {
+    function join(address usr, uint wad) public;
+    function exit(address usr, uint wad) public;
+}
+
+contract PotLike {
+    function chi() external returns (uint);
+    function drip() public;
+    function join(uint wad) public;
+    function exit(uint wad) public;
+}
 
 contract ZCD {
-    // --- Auth ---
+    // --- Contract Auth ---
     mapping (address => uint) public wards;
-    function rely(address guy) public auth { wards[guy] = 1; }
-    function deny(address guy) public auth { wards[guy] = 0; }
+    function rely(address usr) external auth { wards[usr] = 1; }
+    function deny(address usr) external auth { wards[usr] = 0; }
     modifier auth { require(wards[msg.sender] == 1); _; }
 
-    // --- ERC20 Data ---
-    string  public constant name     = "Zero Coupon Dai";
-    string  public constant symbol   = "ZCD";
-    string  public constant version  = "1";
-    uint8   public constant decimals = 18;
-    uint256 public totalSupply;
+    // --- User Auth ---
+    mapping(address => mapping (address => uint)) public can;
+    function hope(address usr) external { can[msg.sender][usr] = 1; }
+    function nope(address usr) external { can[msg.sender][usr] = 0; }
+    function wish(address bit, address usr) internal view returns (bool) {
+        return either(bit == usr, can[bit][usr] == 1);
+    }
 
-    mapping (address => uint)                      public balanceOf;
-    mapping (address => mapping (address => uint)) public allowance;
-    mapping (address => uint)                      public nonces;
-
-    event Approval(address indexed src, address indexed guy, uint wad);
-    event Transfer(address indexed src, address indexed dst, uint wad);
+    // --- Lib ---
+    function either(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := or(x, y)}
+    }
+    function both(bool x, bool y) internal pure returns (bool z) {
+        assembly{ z := and(x, y)}
+    }
 
     // --- Math ---
     function add(uint x, uint y) internal pure returns (uint z) {
@@ -43,93 +50,130 @@ contract ZCD {
     function sub(uint x, uint y) internal pure returns (uint z) {
         require((z = x - y) <= x);
     }
+    function mul(uint x, uint y) internal pure returns (uint z) {
+        require(y == 0 || (z = x * y) / y == x);
+    }
 
-    // --- EIP712 niceties ---
-    bytes32 public DOMAIN_SEPARATOR;
-    bytes32 public constant PERMIT_TYPEHASH = keccak256(
-        "Permit(address holder,address spender,uint256 nonce,uint256 expiry,bool allowed)"
-    );
+    // Contract addresses
+    TokenLike public dai;
+    AdapterLike public adapter;
+    PotLike public pot;
+    DCP public dcp;
 
-    constructor(uint256 chainId_) public {
+    constructor(address dai_, address adapter_, address pot_) public {
         wards[msg.sender] = 1;
-        DOMAIN_SEPARATOR = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256(bytes(name)),
-            keccak256(bytes(version)),
-            chainId_,
-            address(this)
-        ));
+
+        dai = TokenLike(dai_);
+        adapter = AdapterLike(adapter_);
+        pot = PotLike(pot_);
+        dcp = new DCP(dai_, adapter_, pot_, address(this));
+
+        dai.approve(address(dcp), uint(-1));
     }
 
-    // --- Token ---
-    function transfer(address dst, uint wad) public returns (bool) {
-        return transferFrom(msg.sender, dst, wad);
+    struct Terms {
+        address owner;
+        uint256 end;
     }
-    function transferFrom(address src, address dst, uint wad)
-        public returns (bool)
+
+    mapping (bytes32 => Terms) public terms;
+    mapping (bytes32 => uint256) public zcd;
+    uint256 public total;
+
+    event Move(address src, address dst, uint256 end, uint256 wad);
+
+    function move( 
+        address src, 
+        address dst, 
+        uint256 end, 
+        uint256 wad
+    ) 
+        external 
+        returns (bool)
     {
-        require(balanceOf[src] >= wad, "zcd/insufficient-balance");
-        if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
-            require(allowance[src][msg.sender] >= wad, "zcd/insufficient-allowance");
-            allowance[src][msg.sender] = sub(allowance[src][msg.sender], wad);
-        }
-        balanceOf[src] = sub(balanceOf[src], wad);
-        balanceOf[dst] = add(balanceOf[dst], wad);
-        emit Transfer(src, dst, wad);
+        require(wish(src, msg.sender));
+
+        bytes32 srcTerms = keccak256(abi.encodePacked(src, end));
+        bytes32 dstTerms = keccak256(abi.encodePacked(dst, end));
+
+        require(zcd[srcTerms] >= wad, "zcd/insufficient-balance");
+
+        zcd[srcTerms] = sub(zcd[srcTerms], wad);
+        zcd[dstTerms] = add(zcd[dstTerms], wad);
+
+        // update usrTerms and dstTerms terms struct
+
+        emit Move(src, dst, end, wad);
         return true;
     }
-    function mint(address usr, uint wad) public auth {
-        balanceOf[usr] = add(balanceOf[usr], wad);
-        totalSupply    = add(totalSupply, wad);
-        emit Transfer(address(0), usr, wad);
-    }
-    function burn(address usr, uint wad) public auth {
-        require(balanceOf[usr] >= wad, "zcd/insufficient-balance");
-        if (usr != msg.sender && allowance[usr][msg.sender] != uint(-1)) {
-            require(allowance[usr][msg.sender] >= wad, "zcd/insufficient-allowance");
-            allowance[usr][msg.sender] = sub(allowance[usr][msg.sender], wad);
-        }
-        balanceOf[usr] = sub(balanceOf[usr], wad);
-        totalSupply    = sub(totalSupply, wad);
-        emit Transfer(usr, address(0), wad);
-    }
-    function approve(address usr, uint wad) public returns (bool) {
-        allowance[msg.sender][usr] = wad;
-        emit Approval(msg.sender, usr, wad);
-        return true;
+
+    function mint(address usr, uint256 end, uint256 wad) public auth {
+        bytes32 usrTerms = keccak256(abi.encodePacked(usr, end));
+
+        terms[usrTerms].owner = usr;
+        terms[usrTerms].end = end;
+
+        zcd[usrTerms] = add(zcd[usrTerms], wad);
+        total = add(total, wad);
+        emit Move(address(0), usr, end, wad);
     }
 
-    // --- Alias ---
-    function push(address usr, uint wad) public {
-        transferFrom(msg.sender, usr, wad);
-    }
-    function pull(address usr, uint wad) public {
-        transferFrom(usr, msg.sender, wad);
-    }
-    function move(address src, address dst, uint wad) public {
-        transferFrom(src, dst, wad);
+    function burn(address usr, uint256 end, uint256 wad) public auth {
+        bytes32 usrTerms = keccak256(abi.encodePacked(usr, end));
+
+        require(zcd[usrTerms] >= wad, "zcd/insufficient-balance");
+
+        zcd[usrTerms] = sub(zcd[usrTerms], wad);
+        total = sub(total, wad);
+        emit Move(usr, address(0), end, wad);
     }
 
-    // --- Approve by signature ---
-    function permit(address holder, address spender, uint256 nonce, uint256 expiry,
-                    bool allowed, uint8 v, bytes32 r, bytes32 s) public
-    {
-        bytes32 digest =
-            keccak256(abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(abi.encode(PERMIT_TYPEHASH,
-                                     holder,
-                                     spender,
-                                     nonce,
-                                     expiry,
-                                     allowed))
-        ));
-        require(holder == ecrecover(digest, v, r, s), "invalid permit");
-        require(expiry == 0 || now <= expiry, "permit expired");
-        require(nonce == nonces[holder]++, "invalid nonce");
-        uint wad = allowed ? uint(-1) : 0;
-        allowance[holder][spender] = wad;
-        emit Approval(holder, spender, wad);
+    // Issue new ZCD and DCP bonds for requested terms
+    function issue(address usr, uint256 end, uint256 wad) public {
+        require(wish(usr, msg.sender));
+
+        uint depositAmt = mul(pot.chi(), wad);
+
+        // Transfer and lock Dai in savings mode
+        require(dai.transferFrom(usr, address(this), depositAmt));
+        adapter.join(address(this), depositAmt);
+        pot.join(wad);
+
+        // issue zcd and dcp bonds to same owner
+        mint(usr, end, depositAmt);
+        dcp.mint(usr, now, end, depositAmt);
+    }
+
+    // Redeem ZCD bonds after maturity
+    function redeem(address usr, uint256 end, uint256 wad) public {
+        require(wish(usr, msg.sender));
+
+        require(now > end);
+        uint withdrawAmt = mul(pot.chi(), wad);
+
+        burn(usr, end, withdrawAmt);
+
+        // Remove Dai from savings mode and transfer to user
+        pot.exit(wad);
+        adapter.exit(usr, withdrawAmt);
+        require(dai.transferFrom(address(this), usr, withdrawAmt));
+    }
+
+    // Redeem ZCD bonds before maturity
+    function redeem(address usr, uint256 start, uint256 end, uint wad) public {
+        require(wish(usr, msg.sender));
+
+        uint withdrawAmt = mul(pot.chi(), wad);
+
+        bytes32 usrTerms = keccak256(abi.encodePacked(usr, start, end));
+        dcp.claim(usrTerms);
+
+        burn(usr, end, withdrawAmt);
+        dcp.burn(usr, start, end, withdrawAmt);
+
+        // Remove Dai from savings mode and transfer to user
+        pot.exit(wad);
+        adapter.exit(usr, withdrawAmt);
+        require(dai.transferFrom(address(this), usr, withdrawAmt));
     }
 }
