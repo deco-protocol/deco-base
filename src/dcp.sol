@@ -1,4 +1,5 @@
 pragma solidity ^0.5.10;
+pragma experimental ABIEncoderV2;
 
 import {ZCD} from "./zcd.sol";
 
@@ -66,19 +67,23 @@ contract DCP {
         zcd = ZCD(zcd_);
     }
 
+    // Terms of a DCP bond  
     struct Terms {
-        address owner;
-        uint256 start;
-        uint256 end;
+        address owner; // bond owner
+        uint256 start; // can claim DSR after start time
+        uint256 end; // can claim DSR before end time
     }
 
+    // save value of chi at a particular time to process claims later
+    mapping (uint256 => uint256) public chiSnapshot;
+
     mapping (bytes32 => Terms) public terms;
-    mapping (bytes32 => uint256) public dcp;
-    mapping (bytes32 => uint256) public lastChi;
-    mapping (uint256 => uint256) public snapshotChi;
+    mapping (bytes32 => uint256) public balanceOf;
+    mapping (bytes32 => uint256) public chiPaid; // track paid out DSR through claim
 
     event Move(address src, address dst, uint start, uint256 end, uint256 wad);
 
+    // Transfer an bond amount between two users
     function move( 
         address src, 
         address dst, 
@@ -94,13 +99,17 @@ contract DCP {
         bytes32 srcTerms = keccak256(abi.encodePacked(src, start, end));
         bytes32 dstTerms = keccak256(abi.encodePacked(dst, start, end));
 
-        require(dcp[srcTerms] >= wad, "dcp/insufficient-balance");
+        require(balanceOf[srcTerms] >= wad, "dcp/insufficient-balance");
 
         claim(srcTerms);
         claim(dstTerms);
 
-        dcp[srcTerms] = sub(dcp[srcTerms], wad);
-        dcp[dstTerms] = add(dcp[dstTerms], wad);
+        balanceOf[srcTerms] = sub(balanceOf[srcTerms], wad);
+        balanceOf[dstTerms] = add(balanceOf[dstTerms], wad);
+
+        terms[dstTerms].owner = dst;
+        terms[dstTerms].start = start;
+        terms[dstTerms].end = end;
 
         emit Move(src, dst, start, end, wad);
         return true;
@@ -113,16 +122,16 @@ contract DCP {
         terms[usrTerms].start = start;
         terms[usrTerms].end = end;
 
-        dcp[usrTerms] = add(dcp[usrTerms], wad);
+        balanceOf[usrTerms] = add(balanceOf[usrTerms], wad);
         emit Move(address(0), usr, start, end, wad);
     }
 
     function burn(address usr, uint256 start, uint256 end, uint256 wad) public auth {
         bytes32 usrTerms = keccak256(abi.encodePacked(usr, start, end));
 
-        require(dcp[usrTerms] >= wad, "dcp/insufficient-balance");
+        require(balanceOf[usrTerms] >= wad, "dcp/insufficient-balance");
 
-        dcp[usrTerms] = sub(dcp[usrTerms], wad);
+        balanceOf[usrTerms] = sub(balanceOf[usrTerms], wad);
         emit Move(usr, address(0), start, end, wad);
     }
 
@@ -130,7 +139,23 @@ contract DCP {
     function snapshot() public {
         pot.drip();
         uint chi_ = pot.chi();
-        snapshotChi[now] = chi_;
+        chiSnapshot[now] = chi_;
+    }
+
+    // activate a DCP bond to claim DSR if it wasn't during issuance
+    function activate(bytes32 usrTerms, uint256 time) public {
+        uint256 start = terms[usrTerms].start;
+        uint256 end = terms[usrTerms].end;
+
+        require(start <= time && time <= end);
+        require(chiPaid[usrTerms] == 0);
+
+        chiPaid[usrTerms] = chiSnapshot[time];
+    }
+
+    function activate(bytes32 usrTerms) public {
+        snapshot();
+        activate(usrTerms, now);
     }
 
     // claim coupon payments
@@ -140,19 +165,20 @@ contract DCP {
         uint256 end = terms[usrTerms].end;
 
         require(start <= time && time <= end);
+        require(chiPaid[usrTerms] != 0);
 
-        uint chi_ = snapshotChi[time];
-        require(chi_ > lastChi[usrTerms]);
+        uint chi_ = chiSnapshot[time];
+        require(chi_ > chiPaid[usrTerms]);
 
-        if (!(lastChi[usrTerms] == 0 || lastChi[usrTerms] == 0)) {
-            uint daiBalance = mul(lastChi[usrTerms], sub(chi_, lastChi[usrTerms]));
+        if (!(chiPaid[usrTerms] == 0 || chiPaid[usrTerms] == 0)) {
+            uint daiBalance = mul(chiPaid[usrTerms], sub(chi_, chiPaid[usrTerms]));
 
             pot.exit(daiBalance / chi_);
             adapter.exit(usr, daiBalance);
             require(dai.transferFrom(address(zcd), usr, daiBalance));
         }
 
-        lastChi[usrTerms] = chi_;
+        chiPaid[usrTerms] = chi_;
     }
 
     // claim coupon payments now
