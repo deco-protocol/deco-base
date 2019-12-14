@@ -1,7 +1,10 @@
 pragma solidity ^0.5.10;
-// pragma experimental ABIEncoderV2;
 
 import {DCP} from "./dcp.sol";
+
+contract VatLike {
+    function hope(address) external;
+}
 
 contract TokenLike {
     function transferFrom(address src, address dst, uint wad) public returns (bool);
@@ -14,8 +17,10 @@ contract AdapterLike {
 }
 
 contract PotLike {
-    function chi() external returns (uint);
-    function drip() public;
+    function vat() public returns (VatLike);
+    function chi() external returns (uint ray);
+    function rho() external returns (uint);
+    function drip() public returns (uint);
     function join(uint wad) public;
     function exit(uint wad) public;
 }
@@ -27,7 +32,7 @@ contract ZCD {
     function deny(address usr) external auth { wards[usr] = 0; }
     modifier auth { require(wards[msg.sender] == 1); _; }
 
-    // --- User Auth ---
+    // --- User Approvals ---
     mapping(address => mapping (address => uint)) public can;
     function hope(address usr) external { can[msg.sender][usr] = 1; }
     function nope(address usr) external { can[msg.sender][usr] = 0; }
@@ -44,150 +49,135 @@ contract ZCD {
     }
 
     // --- Math ---
+    uint256 constant ONE = 10 ** 27;
+
+    function rmul(uint x, uint y) internal pure returns (uint z) {
+        z = mul(x, y) / ONE;
+    }
+
     function add(uint x, uint y) internal pure returns (uint z) {
         require((z = x + y) >= x);
     }
+
     function sub(uint x, uint y) internal pure returns (uint z) {
         require((z = x - y) <= x);
     }
+
     function mul(uint x, uint y) internal pure returns (uint z) {
         require(y == 0 || (z = x * y) / y == x);
     }
 
-    // Contract addresses
+    VatLike  public vat;
     TokenLike public dai;
     AdapterLike public adapter;
     PotLike public pot;
     DCP public dcp;
 
     constructor(address dai_, address adapter_, address pot_) public {
-        wards[msg.sender] = 1; // set deployer address as owner
+        wards[msg.sender] = 1;
 
         dai = TokenLike(dai_);
         adapter = AdapterLike(adapter_);
         pot = PotLike(pot_);
+        vat = pot.vat();
+        dcp = new DCP(dai_, adapter_, pot_);
 
-        // create a new DCP token contract
-        dcp = new DCP(dai_, adapter_, pot_, address(this));
+        vat.hope(address(adapter));
+        vat.hope(address(pot));
 
-        // approve DCP contract to spend ZCD Dai balance
+        dai.approve(address(adapter), uint(-1));
         dai.approve(address(dcp), uint(-1));
     }
 
-    // Terms of a ZCD bond
-    struct Terms {
-        address owner; // bond owner
-        uint256 end; // bond maturity time
+    mapping (address => mapping (bytes32 => uint)) public balanceOf; // user address => zcd class => balance in wad
+    uint public totalSupply;
+
+    struct Class {
+        uint end;
     }
 
-    mapping (bytes32 => Terms) public terms;
-    mapping (bytes32 => uint256) public balanceOf; // user balance for each set of terms
-    uint256 public totalIssuance; // total ZCD bonds outstanding
+    event Mint(address usr, uint end, uint wad);
+    event Burn(address usr, uint end, uint wad);
+    event Move(address src, address dst, uint end, uint wad);
 
-    event Move(address src, address dst, uint256 end, uint256 wad);
+    // --- Internal functions ---
+    function mint(address usr, uint end, uint wad) internal auth {
+        bytes32 class = keccak256(abi.encodePacked(end));
 
-    // Transfer bond amount between two users
-    function move( 
-        address src, 
-        address dst, 
-        uint256 end, 
-        uint256 wad
-    ) 
-        external 
-        returns (bool)
-    {
+        balanceOf[usr][class] = add(balanceOf[usr][class], wad);
+        totalSupply = add(totalSupply, wad);
+        emit Mint(usr, end, wad);
+    }
+
+    function burn(address usr, uint end, uint wad) internal auth {
+        bytes32 class = keccak256(abi.encodePacked(end));
+
+        require(balanceOf[usr][class] >= wad, "zcd/insufficient-balance");
+
+        balanceOf[usr][class] = sub(balanceOf[usr][class], wad);
+        totalSupply = sub(totalSupply, wad);
+        emit Burn(usr, end, wad);
+    }
+
+    // --- External and Public functions ---
+    // Transfers ZCD balance of a certain class
+    function move(address src, address dst, uint end, uint wad) external returns (bool) {
         require(wish(src, msg.sender));
 
-        bytes32 srcTerms = keccak256(abi.encodePacked(src, end));
-        bytes32 dstTerms = keccak256(abi.encodePacked(dst, end));
+        bytes32 class = keccak256(abi.encodePacked(end));
 
-        require(balanceOf[srcTerms] >= wad, "balance/insufficient-balance");
+        require(balanceOf[src][class] >= wad, "zcd/insufficient-balance");
 
-        balanceOf[srcTerms] = sub(balanceOf[srcTerms], wad);
-        balanceOf[dstTerms] = add(balanceOf[dstTerms], wad);
-
-        // set destination bond terms
-        terms[dstTerms].owner = dst;
-        terms[dstTerms].end = end;
+        balanceOf[src][class] = sub(balanceOf[src][class], wad);
+        balanceOf[dst][class] = add(balanceOf[dst][class], wad);
 
         emit Move(src, dst, end, wad);
         return true;
     }
 
-    function mint(address usr, uint256 end, uint256 wad) internal auth {
-        bytes32 usrTerms = keccak256(abi.encodePacked(usr, end));
-
-        terms[usrTerms].owner = usr;
-        terms[usrTerms].end = end;
-
-        balanceOf[usrTerms] = add(balanceOf[usrTerms], wad);
-        totalIssuance = add(totalIssuance, wad);
-        emit Move(address(0), usr, end, wad);
-    }
-
-    function burn(address usr, uint256 end, uint256 wad) internal auth {
-        bytes32 usrTerms = keccak256(abi.encodePacked(usr, end));
-
-        require(balanceOf[usrTerms] >= wad, "balance/insufficient-balance");
-
-        balanceOf[usrTerms] = sub(balanceOf[usrTerms], wad);
-        totalIssuance = sub(totalIssuance, wad);
-        emit Move(usr, address(0), end, wad);
-    }
-
-    // Lock Dai and issue new ZCD and DCP bonds for requested terms
-    function issue(address usr, uint256 end, uint256 wad) public {
+    // Locks dai in DSR contract to mint ZCD and DCP balance
+    function issue(address usr, uint end, uint wad) public {
         require(wish(usr, msg.sender));
 
-        uint depositAmt = mul(pot.chi(), wad);
+        uint val = rmul(wad, pot.drip());
 
-        // Lock Dai in savings mode
-        require(dai.transferFrom(usr, address(this), depositAmt));
-        adapter.join(address(this), depositAmt);
+        require(dai.transferFrom(usr, address(this), val));
+        adapter.join(address(this), val);
         pot.join(wad);
 
-        // Issue zcd and dcp bonds
-        mint(usr, end, depositAmt);
-        dcp.mint(usr, now, end, depositAmt);
+        mint(usr, end, val);
+        dcp.mint(usr, now, end, val);
+        dcp.snapshot();
     }
 
-    // Redeem ZCD bond amount for Dai after maturity
-    function redeem(address usr, uint256 end, uint256 wad) public {
+    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
+    function withdraw(address usr, uint start, uint end, uint wad) public {
+        require(wish(usr, msg.sender));
+
+        uint val = rmul(wad, pot.drip());
+
+        dcp.claim(usr, start, end, now);
+
+        burn(usr, end, val);
+        dcp.burn(usr, start, end, val);
+
+        pot.exit(wad);
+        adapter.exit(usr, val);
+        require(dai.transferFrom(address(this), usr, val));
+    }
+
+    // Redeem ZCD for dai after maturity
+    function redeem(address usr, uint end, uint wad) public {
         require(wish(usr, msg.sender));
 
         require(now > end);
 
-        // calculate amount of dai to withdraw
-        uint withdrawAmt = mul(pot.chi(), wad);
+        uint val = rmul(wad, pot.drip());
 
-        // Remove ZCD balance
-        burn(usr, end, withdrawAmt);
+        burn(usr, end, val);
 
-        // Remove Dai from savings mode and transfer back to user
         pot.exit(wad);
-        adapter.exit(usr, withdrawAmt);
-        require(dai.transferFrom(address(this), usr, withdrawAmt));
-    }
-
-    // Redeem ZCD bonds before maturity with equal amount of same term DCP bonds
-    function redeem(address usr, uint256 start, uint256 end, uint wad) public {
-        require(wish(usr, msg.sender));
-
-        // calculate amount of dai to withdraw
-        uint withdrawAmt = mul(pot.chi(), wad);
-
-        bytes32 usrTerms = keccak256(abi.encodePacked(usr, start, end));
-        
-        // remove ZCD bond
-        burn(usr, end, withdrawAmt);
-
-        // claim all accrued savings until now before burning DCP bond
-        dcp.claim(usrTerms);
-        dcp.burn(usr, start, end, withdrawAmt);
-
-        // Remove Dai from savings mode and transfer to user
-        pot.exit(wad);
-        adapter.exit(usr, withdrawAmt);
-        require(dai.transferFrom(address(this), usr, withdrawAmt));
+        adapter.exit(usr, val);
+        require(dai.transferFrom(address(this), usr, val));
     }
 }
