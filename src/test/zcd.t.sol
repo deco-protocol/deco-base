@@ -6,7 +6,6 @@ import {DaiJoin} from "dss/join.sol";
 import {Vat} from "dss/vat.sol";
 import {Pot} from "dss/pot.sol";
 import "../zcd.sol";
-import {DCP} from "../dcp.sol";
 
 contract Hevm {
     function warp(uint256) public;
