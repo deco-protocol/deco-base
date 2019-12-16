@@ -194,7 +194,7 @@ contract ZCD {
 
         uint val = rmul(wad, pot.drip());
 
-        claim(usr, start, end, now);
+        claim(usr, start, end, now); // will fail if start is in the future
 
         burnZCD(usr, end, val);
         burnDCP(usr, start, end, val);
@@ -258,7 +258,6 @@ contract ZCD {
         require((start <= time) && (time <= end));
 
         payment = mul(balance, sub(timeChi, startChi)); // wad * ray -> rad
-        require(payment > 0);
 
         burnDCP(usr, start, end, balance);
         mintDCP(usr, time, end, balance);
