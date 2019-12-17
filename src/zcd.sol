@@ -184,7 +184,7 @@ contract ZCD {
         pot.join(wad);
 
         mintZCD(usr, end, val);
-        mintDCP(usr, now, end, val);
+        mintDCP(usr, now, end, wad);
         snapshot();
     }
 
@@ -197,7 +197,7 @@ contract ZCD {
         claim(usr, start, end, now); // will fail if start is in the future
 
         burnZCD(usr, end, val);
-        burnDCP(usr, start, end, val);
+        burnDCP(usr, start, end, wad);
 
         pot.exit(wad);
         adapter.exit(usr, val);
@@ -254,7 +254,7 @@ contract ZCD {
         uint payment;
         uint val;
 
-        require((startChi != 0) && (timeChi != 0) && (timeChi > startChi));
+        require((startChi != 0) && (timeChi != 0) && (timeChi >= startChi));
         require((start <= time) && (time <= end));
 
         payment = mul(balance, sub(timeChi, startChi)); // wad * ray -> rad
