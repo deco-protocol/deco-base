@@ -179,8 +179,8 @@ contract ZCD {
 
         uint val = rmul(wad, pot.drip());
 
-        require(dai.transferFrom(usr, address(this), val));
-        adapter.join(address(this), val);
+        require(dai.transferFrom(usr, address(this), val+1)); // additional wei to fix mul(wad,chi) mismatch in pot
+        adapter.join(address(this), val+1);
         pot.join(wad);
 
         mintZCD(usr, end, val);
@@ -201,7 +201,6 @@ contract ZCD {
 
         pot.exit(wad);
         adapter.exit(usr, val);
-        require(dai.transferFrom(address(this), usr, val));
     }
 
     // Redeem ZCD for dai after maturity
@@ -216,7 +215,6 @@ contract ZCD {
 
         pot.exit(wad);
         adapter.exit(usr, val);
-        require(dai.transferFrom(address(this), usr, val));
     }
 
     // Snapshots chi value at a particular time for future use
