@@ -48,21 +48,20 @@ contract ZCD {
 
     // --- Math ---
     uint256 constant ONE = 10 ** 27;
-
     function add(uint x, uint y) internal pure returns (uint z) {
         require((z = x + y) >= x);
     }
-
     function sub(uint x, uint y) internal pure returns (uint z) {
         require((z = x - y) <= x);
     }
-
     function mul(uint x, uint y) internal pure returns (uint z) {
         require(y == 0 || (z = x * y) / y == x);
     }
-
     function rmul(uint x, uint y) internal pure returns (uint z) {
         z = mul(x, y) / ONE;
+    }
+    function rdiv(uint x, uint y) internal pure returns (uint z) {
+        z = mul(x, ONE) / y;
     }
 
     VatLike  public vat;
@@ -189,15 +188,13 @@ contract ZCD {
     }
 
     // Merge equal amounts of ZCD and DCP of same class to withdraw dai
-    function withdraw(address usr, uint start, uint end, uint wad) public {
+    function withdraw(address usr, uint end, uint wad) public {
         require(wish(usr, msg.sender));
 
         uint val = rmul(wad, pot.drip());
 
-        claim(usr, start, end, now); // will fail if start is in the future
-
         burnZCD(usr, end, val);
-        burnDCP(usr, start, end, wad);
+        burnDCP(usr, now, end, wad); // DCP should be fully claimed
 
         pot.exit(wad);
         adapter.exit(usr, val);
@@ -245,27 +242,29 @@ contract ZCD {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         uint balance = dcp[usr][class];
+        uint currentChi = snapshot(); // need a snapshot if time == now
         uint startChi = chiSnapshot[start];
         uint timeChi = chiSnapshot[time];
-        uint currentChi = snapshot();
 
+        uint newbalance;
         uint payment;
         uint val;
 
-        require((startChi != 0) && (timeChi != 0) && (timeChi >= startChi));
+        require((startChi != 0) && (timeChi != 0) && (timeChi > startChi));
         require((start <= time) && (time <= end));
+        require(balance > 0);
 
         payment = mul(balance, sub(timeChi, startChi)); // wad * ray -> rad
+        newbalance = rdiv(rmul(balance, startChi), timeChi); // division rounds down balance
 
         burnDCP(usr, start, end, balance);
-        mintDCP(usr, time, end, balance);
+        mintDCP(usr, time, end, newbalance);
 
         val = payment / currentChi; // rad / ray -> wad
         payment = rmul(val, currentChi); // wad * ray -> wad
 
         pot.exit(val);
         adapter.exit(usr, payment);
-        require(dai.transferFrom(address(this), usr, payment));
     }
 
     // Splits a single DCP into two contiguous DCPs
