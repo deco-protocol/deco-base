@@ -24,12 +24,6 @@ contract PotLike {
 }
 
 contract ZCD {
-    // --- Contract Auth ---
-    mapping (address => uint) public wards;
-    function rely(address usr) external auth { wards[usr] = 1; }
-    function deny(address usr) external auth { wards[usr] = 0; }
-    modifier auth { require(wards[msg.sender] == 1); _; }
-
     // --- User Approvals ---
     mapping(address => mapping (address => uint)) public can;
     function hope(address usr) external { can[msg.sender][usr] = 1; }
@@ -70,8 +64,6 @@ contract ZCD {
     PotLike public pot;
 
     constructor(address dai_, address adapter_, address pot_) public {
-        wards[msg.sender] = 1;
-
         dai = TokenLike(dai_);
         adapter = AdapterLike(adapter_);
         pot = PotLike(pot_);
@@ -106,8 +98,8 @@ contract ZCD {
     event MoveDCP(address src, address dst, uint start, uint end, uint wad);
     event ChiSnapshot(uint time, uint chi);
 
-    // --- Internal functions ---
-    function mintZCD(address usr, uint end, uint wad) internal auth {
+    // --- Private functions ---
+    function mintZCD(address usr, uint end, uint wad) private {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         zcd[usr][class] = add(zcd[usr][class], wad);
@@ -115,7 +107,7 @@ contract ZCD {
         emit MintZCD(usr, end, wad);
     }
 
-    function burnZCD(address usr, uint end, uint wad) internal auth {
+    function burnZCD(address usr, uint end, uint wad) private {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         require(zcd[usr][class] >= wad, "zcd/insufficient-balance");
@@ -125,14 +117,14 @@ contract ZCD {
         emit BurnZCD(usr, end, wad);
     }
 
-    function mintDCP(address usr, uint start, uint end, uint wad) internal auth {
+    function mintDCP(address usr, uint start, uint end, uint wad) private {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         dcp[usr][class] = add(dcp[usr][class], wad);
         emit MintDCP(usr, start, end, wad);
     }
 
-    function burnDCP(address usr, uint start, uint end, uint wad) internal auth {
+    function burnDCP(address usr, uint start, uint end, uint wad) private {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         require(dcp[usr][class] >= wad, "dcp/insufficient-balance");
@@ -173,7 +165,7 @@ contract ZCD {
     }
 
     // Locks dai in DSR contract to mint ZCD and DCP balance
-    function issue(address usr, uint end, uint wad) public {
+    function issue(address usr, uint end, uint wad) external {
         require(wish(usr, msg.sender));
 
         uint val = rmul(wad, pot.drip());
@@ -188,7 +180,7 @@ contract ZCD {
     }
 
     // Merge equal amounts of ZCD and DCP of same class to withdraw dai
-    function withdraw(address usr, uint end, uint wad) public {
+    function withdraw(address usr, uint end, uint wad) external {
         require(wish(usr, msg.sender));
 
         uint val = rmul(wad, pot.drip());
@@ -201,7 +193,7 @@ contract ZCD {
     }
 
     // Redeem ZCD for dai after maturity
-    function redeem(address usr, uint end, uint wad) public {
+    function redeem(address usr, uint end, uint wad) external {
         require(wish(usr, msg.sender));
 
         require(now > end);
@@ -223,7 +215,7 @@ contract ZCD {
     }
 
     // Sets DCP start to time for which a snapshot is available
-    function activate(address usr, uint start, uint end, uint time) public {
+    function activate(address usr, uint start, uint end, uint time) external {
         require(wish(usr, msg.sender));
         
         bytes32 class = keccak256(abi.encodePacked(start, end));
@@ -238,7 +230,7 @@ contract ZCD {
     }
 
     // Claims DCP coupon payments and deposits them as dai
-    function claim(address usr, uint start, uint end, uint time) public {
+    function claim(address usr, uint start, uint end, uint time) external {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         uint balance = dcp[usr][class];
@@ -268,7 +260,7 @@ contract ZCD {
     }
 
     // Splits a single DCP into two contiguous DCPs
-    function split(address usr, uint start, uint end, uint mid, uint wad) public {
+    function split(address usr, uint start, uint end, uint mid, uint wad) external {
         require(wish(usr, msg.sender));
 
         require(start > mid && mid > end);
@@ -280,7 +272,7 @@ contract ZCD {
     }
 
     // Merges two contiguous DCPs into a single DCP
-    function merge(address usr, uint start1, uint end1, uint start2, uint end2, uint wad) public {
+    function merge(address usr, uint start1, uint end1, uint start2, uint end2, uint wad) external {
         require(wish(usr, msg.sender));
 
         require(add(end1, 1) == start2);
