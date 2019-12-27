@@ -62,8 +62,8 @@ contract ZCDTest is DSTest {
         z = add(mul(x, RAY), sub(y, 1)) / y;
     }
 
-    function day(uint number) internal returns (uint day_) {
-        day_ = add(DATE, number);
+    function day(uint x) internal returns (uint day_) {
+        day_ = add(DATE, x);
     }
 
     function setUp() public {
@@ -74,18 +74,18 @@ contract ZCDTest is DSTest {
         pot = new Pot(address(vat));
         dai = new Dai(99);
         adapter = new DaiJoin(address(vat), address(dai));
+        self = address(this);
+        vow = address(bytes20("vow"));
 
         vat.rely(address(pot));
-        dai.rely(address(adapter));
-        self = address(this);
-
-        vow = address(bytes20("vow"));
+        dai.rely(address(adapter));        
         pot.file("vow", vow);
+
+        zcd = new ZCD(address(pot));
 
         vat.hope(address(pot));
         vat.hope(address(adapter));
-
-        zcd = new ZCD(address(dai), address(adapter), address(pot));
+        vat.hope(address(zcd));
 
         dai.approve(address(adapter), uint(-1));
         dai.approve(address(zcd), uint(-1));
@@ -105,26 +105,26 @@ contract ZCDTest is DSTest {
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
         bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
 
-        assertEq(zcd.zcd(self, zcdClass), rmul(val, pot.drip()));
+        assertEq(zcd.zcd(self, zcdClass), mul(val, pot.drip()));
         assertEq(zcd.dcp(self, dcpClass), val);
     }
 
     function test_withdraw_dai_before_expiry() public {
         uint val = rdiv(10 ether, pot.drip());
-
+        
         zcd.issue(self, day(3), val);
         hevm.warp(day(2));
-
+        
         bytes32 zcdClass = keccak256(abi.encodePacked(day(3)));
         bytes32 dcpClass1 = keccak256(abi.encodePacked(day(1), day(3)));
         bytes32 dcpClass2 = keccak256(abi.encodePacked(day(2), day(3)));
 
         zcd.claim(self, day(1), day(3), now);
         zcd.withdraw(self, day(3), zcd.dcp(self, dcpClass2));
-
-        assertEq(zcd.zcd(self, zcdClass), 1 wei); // dcp balance 1 wei lower after claim due to rounding
+        
+        assertEq(wad(zcd.zcd(self, zcdClass)), 1 wei); // dcp balance 1 wei lower after claim due to rounding
         assertEq(zcd.dcp(self, dcpClass1), 0 ether);
         assertEq(zcd.dcp(self, dcpClass2), 0 ether);
-        assertEq(dai.balanceOf(self), rmul(val, pot.drip()) + 90 ether - 2 wei);
+        assertEq(wad(vat.dai(self)), wad(mul(val, pot.drip())) + 90 ether - 2 wei);
     }
 }

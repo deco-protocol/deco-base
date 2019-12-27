@@ -2,16 +2,7 @@ pragma solidity ^0.5.10;
 
 contract VatLike {
     function hope(address) external;
-}
-
-contract TokenLike {
-    function transferFrom(address src, address dst, uint wad) public returns (bool);
-    function approve(address usr, uint wad) external returns (bool);
-}
-
-contract AdapterLike {
-    function join(address usr, uint wad) public;
-    function exit(address usr, uint wad) public;
+    function move(address,address,uint256) external;
 }
 
 contract PotLike {
@@ -54,15 +45,10 @@ contract ZCD {
     mapping(address => mapping (address => bool)) public approvals;
 
     event Approval(address indexed sender, address indexed usr, bool approval);
-
-    function approve(address usr) external {
-        approvals[msg.sender][usr] = true;
-        emit Approval(msg.sender, usr, true);
-    }
-
-    function refuse(address usr) external {
-        approvals[msg.sender][usr] = false;
-        emit Approval(msg.sender, usr, false);
+    
+    function approve(address usr, bool approval) external {
+        approvals[msg.sender][usr] = approval;
+        emit Approval(msg.sender, usr, approval);
     }
 
     modifier approved(address usr) {
@@ -71,39 +57,22 @@ contract ZCD {
     }
 
     VatLike  public vat;
-    TokenLike public dai;
-    AdapterLike public adapter;
     PotLike public pot;
 
-    constructor(address dai_, address adapter_, address pot_) public {
-        dai = TokenLike(dai_);
-        adapter = AdapterLike(adapter_);
+    constructor(address pot_) public {
         pot = PotLike(pot_);
         vat = pot.vat();
-
-        vat.hope(address(adapter));
         vat.hope(address(pot));
-
-        dai.approve(address(adapter), uint(-1));
     }
 
-    mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance in wad
-    mapping (address => mapping (bytes32 => uint)) public dcp; // user address => dcp class => dcp balance in wad
-    mapping (uint => uint) public chiSnapshot; // time => value of chi at time
-    uint public totalSupply; // total ZCD supply
+    mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance [rad]
+    mapping (address => mapping (bytes32 => uint)) public dcp; // user address => dcp class => dcp balance [wad]
+    mapping (uint => uint) public chi; // time => pot.chi value [ray]
+    uint public totalSupply; // total ZCD supply [rad]
 
-    struct classZCD {
-        uint end;
-    }
-
-    struct classDCP {
-        uint start;
-        uint end;
-    }
-
-    event MintZCD(address usr, uint end, uint wad);
-    event BurnZCD(address usr, uint end, uint wad);
-    event MoveZCD(address src, address dst, uint end, uint wad);
+    event MintZCD(address usr, uint end, uint rad);
+    event BurnZCD(address usr, uint end, uint rad);
+    event MoveZCD(address src, address dst, uint end, uint rad);
 
     event MintDCP(address usr, uint start, uint end, uint wad);
     event BurnDCP(address usr, uint start, uint end, uint wad);
@@ -111,22 +80,22 @@ contract ZCD {
     event ChiSnapshot(uint time, uint chi);
 
     // --- Private functions ---
-    function mintZCD(address usr, uint end, uint wad) private {
+    function mintZCD(address usr, uint end, uint rad) private {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        zcd[usr][class] = add(zcd[usr][class], wad);
-        totalSupply = add(totalSupply, wad);
-        emit MintZCD(usr, end, wad);
+        zcd[usr][class] = add(zcd[usr][class], rad);
+        totalSupply = add(totalSupply, rad);
+        emit MintZCD(usr, end, rad);
     }
 
-    function burnZCD(address usr, uint end, uint wad) private {
+    function burnZCD(address usr, uint end, uint rad) private {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        require(zcd[usr][class] >= wad, "zcd/insufficient-balance");
+        require(zcd[usr][class] >= rad, "zcd/insufficient-balance");
 
-        zcd[usr][class] = sub(zcd[usr][class], wad);
-        totalSupply = sub(totalSupply, wad);
-        emit BurnZCD(usr, end, wad);
+        zcd[usr][class] = sub(zcd[usr][class], rad);
+        totalSupply = sub(totalSupply, rad);
+        emit BurnZCD(usr, end, rad);
     }
 
     function mintDCP(address usr, uint start, uint end, uint wad) private {
@@ -147,20 +116,19 @@ contract ZCD {
 
     // --- External and Public functions ---
     // Transfers ZCD balance of a certain class
-    function moveZCD(address src, address dst, uint end, uint wad) external approved(src) returns (bool) {
+    function moveZCD(address src, address dst, uint end, uint rad) external approved(src) {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        require(zcd[src][class] >= wad, "zcd/insufficient-balance");
+        require(zcd[src][class] >= rad, "zcd/insufficient-balance");
 
-        zcd[src][class] = sub(zcd[src][class], wad);
-        zcd[dst][class] = add(zcd[dst][class], wad);
+        zcd[src][class] = sub(zcd[src][class], rad);
+        zcd[dst][class] = add(zcd[dst][class], rad);
 
-        emit MoveZCD(src, dst, end, wad);
-        return true;
+        emit MoveZCD(src, dst, end, rad);
     }
 
     // Transfers DCP balance of a certain class
-    function moveDCP(address src, address dst, uint start, uint end, uint wad) external approved(src) returns (bool) {
+    function moveDCP(address src, address dst, uint start, uint end, uint wad) external approved(src) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         require(dcp[src][class] >= wad, "dcp/insufficient-balance");
@@ -169,50 +137,43 @@ contract ZCD {
         dcp[dst][class] = add(dcp[dst][class], wad);
 
         emit MoveDCP(src, dst, start, end, wad);
-        return true;
     }
 
     // Locks dai in DSR contract to mint ZCD and DCP balance
     function issue(address usr, uint end, uint wad) external approved(usr) {
-        uint val = rmul(wad, pot.drip());
-
-        require(dai.transferFrom(usr, address(this), val+1)); // additional wei to fix mul(wad,chi) mismatch in pot
-        adapter.join(address(this), val+1);
+        uint rad = mul(wad, snapshot());
+        vat.move(usr, address(this), rad);
         pot.join(wad);
 
-        mintZCD(usr, end, val);
+        mintZCD(usr, end, rad);
         mintDCP(usr, now, end, wad);
-        snapshot();
     }
 
     // Merge equal amounts of ZCD and DCP of same class to withdraw dai
     function withdraw(address usr, uint end, uint wad) external approved(usr) {
-        uint val = rmul(wad, pot.drip());
-
-        burnZCD(usr, end, val);
-        burnDCP(usr, now, end, wad); // DCP should be fully claimed
-
+        uint rad = mul(wad, snapshot());
         pot.exit(wad);
-        adapter.exit(usr, val);
+        vat.move(address(this), usr, rad);
+
+        burnZCD(usr, end, rad);
+        burnDCP(usr, now, end, wad); // DCP should be fully claimed
     }
 
     // Redeem ZCD for dai after maturity
     function redeem(address usr, uint end, uint wad) external approved(usr) {
         require(now > end);
 
-        uint val = rmul(wad, pot.drip());
-
-        burnZCD(usr, end, val);
-
+        uint rad = mul(wad, snapshot());
         pot.exit(wad);
-        adapter.exit(usr, val);
+        vat.move(address(this), usr, rad);
+
+        burnZCD(usr, end, rad);
     }
 
-    // Snapshots chi value at a particular time for future use
+    // Snapshots chi value at a particular time
     function snapshot() public returns (uint chi_) {
         chi_ = pot.drip();
-        chiSnapshot[now] = chi_;
-
+        chi[now] = chi_;
         emit ChiSnapshot(now, chi_);
     }
 
@@ -220,43 +181,34 @@ contract ZCD {
     function activate(address usr, uint start, uint end, uint time) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        require(chiSnapshot[start] == 0);
-        require(chiSnapshot[time] != 0);
+        require(chi[start] == 0);
+        require(chi[time] != 0);
         require(start <= time && time <= end);
         require(start != time);
-
-        burnDCP(usr, start, end, dcp[usr][class]);
-        mintDCP(usr, time, end, dcp[usr][class]);
+        
+        uint wad = dcp[usr][class];
+        burnDCP(usr, start, end, wad);
+        mintDCP(usr, time, end, wad);
     }
 
     // Claims DCP coupon payments and deposits them as dai
     function claim(address usr, uint start, uint end, uint time) external {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        uint balance = dcp[usr][class];
-        uint currentChi = snapshot(); // need a snapshot if time == now
-        uint startChi = chiSnapshot[start];
-        uint timeChi = chiSnapshot[time];
+        uint wad = dcp[usr][class];
+        snapshot();
 
-        uint newbalance;
-        uint payment;
-        uint val;
-
-        require((startChi != 0) && (timeChi != 0) && (timeChi > startChi));
+        require((chi[start] != 0) && (chi[time] != 0) && (chi[time] > chi[start]));
         require((start <= time) && (time <= end));
-        require(balance > 0);
+        require(wad > 0);
 
-        payment = mul(balance, sub(timeChi, startChi)); // wad * ray -> rad
-        newbalance = rdiv(rmul(balance, startChi), timeChi); // division rounds down balance
+        burnDCP(usr, start, end, wad);
+        mintDCP(usr, time, end, rdiv(rmul(wad, chi[start]), chi[time])); // division rounds down wad
 
-        burnDCP(usr, start, end, balance);
-        mintDCP(usr, time, end, newbalance);
-
-        val = payment / currentChi; // rad / ray -> wad
-        payment = rmul(val, currentChi); // wad * ray -> wad
+        uint val = mul(wad, sub(chi[time], chi[start])) / chi[now]; // wad * ray / ray -> wad
 
         pot.exit(val);
-        adapter.exit(usr, payment);
+        vat.move(address(this), usr, mul(val, chi[now]));
     }
 
     // Splits a single DCP into two contiguous DCPs
