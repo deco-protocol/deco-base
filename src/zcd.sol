@@ -212,22 +212,18 @@ contract ZCD {
     }
 
     // Splits a single DCP into two contiguous DCPs
-    function split(address usr, uint start, uint end, uint mid, uint wad) external approved(usr) {
-        require(start > mid && mid > end);
+    function split(address usr, uint t1, uint t2, uint t3, uint wad) external approved(usr) {
+        require(t1 > t2 && t2 > t3);
 
-        burnDCP(usr, start, end, wad);
-
-        mintDCP(usr, start, mid, wad);
-        mintDCP(usr, add(mid, 1), end, wad);
+        burnDCP(usr, t1, t3, wad);
+        mintDCP(usr, t1, t2, wad);
+        mintDCP(usr, t2, t3, wad);
     }
 
     // Merges two contiguous DCPs into a single DCP
-    function merge(address usr, uint start1, uint end1, uint start2, uint end2, uint wad) external approved(usr) {
-        require(add(end1, 1) == start2);
-
-        burnDCP(usr, start1, end1, wad);
-        burnDCP(usr, start2, end2, wad);
-
-        mintDCP(usr, start1, end2, wad);
+    function merge(address usr, uint t1, uint t2, uint t3, uint wad) external approved(usr) {
+        burnDCP(usr, t1, t2, wad);
+        burnDCP(usr, t2, t3, wad);
+        mintDCP(usr, t1, t3, wad);
     }
 }

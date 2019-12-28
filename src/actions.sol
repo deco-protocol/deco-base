@@ -29,7 +29,7 @@ contract ZCDLike {
     function activate(address, uint, uint, uint) external;
     function claim(address, uint, uint, uint) external;
     function split(address, uint, uint, uint, uint) external;
-    function merge(address, uint, uint, uint, uint, uint) external;
+    function merge(address, uint, uint, uint, uint) external;
 }
 
 contract Common {
