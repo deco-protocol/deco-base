@@ -81,4 +81,14 @@ contract ZCDProxyActions is Common {
         vat.frob(ilk_, usr, usr, usr, 0, dart);
         zcd.issue(usr, end, wad);
     }
+
+    // Claim and payback stability fee
+    function claimAndPaybackStabilityFee() public {
+        // TODO
+    }
+
+    // Redeposit claimed savings into pot
+    function redepositClaimedSavings() public {
+        // TODO
+    }
 }

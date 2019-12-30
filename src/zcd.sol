@@ -81,6 +81,7 @@ contract ZCD {
 
     // --- Private functions ---
     function mintZCD(address usr, uint end, uint rad) private {
+        require(now <= end);
         bytes32 class = keccak256(abi.encodePacked(end));
 
         zcd[usr][class] = add(zcd[usr][class], rad);
@@ -89,6 +90,7 @@ contract ZCD {
     }
 
     function burnZCD(address usr, uint end, uint rad) private {
+        require(now <= end);
         bytes32 class = keccak256(abi.encodePacked(end));
 
         require(zcd[usr][class] >= rad, "zcd/insufficient-balance");
@@ -99,6 +101,7 @@ contract ZCD {
     }
 
     function mintDCP(address usr, uint start, uint end, uint wad) private {
+        require(start <= end);
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         dcp[usr][class] = add(dcp[usr][class], wad);
@@ -106,6 +109,7 @@ contract ZCD {
     }
 
     function burnDCP(address usr, uint start, uint end, uint wad) private {
+        require(start <= end);
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         require(dcp[usr][class] >= wad, "dcp/insufficient-balance");
@@ -222,6 +226,8 @@ contract ZCD {
 
     // Merges two contiguous DCPs into a single DCP
     function merge(address usr, uint t1, uint t2, uint t3, uint wad) external approved(usr) {
+        require(t1 > t2 && t2 > t3);
+
         burnDCP(usr, t1, t2, wad);
         burnDCP(usr, t2, t3, wad);
         mintDCP(usr, t1, t3, wad);
