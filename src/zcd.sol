@@ -70,13 +70,13 @@ contract ZCD {
     mapping (uint => uint) public chi; // time => pot.chi value [ray]
     uint public totalSupply; // total ZCD supply [rad]
 
-    event MintZCD(address usr, uint end, uint rad);
-    event BurnZCD(address usr, uint end, uint rad);
-    event MoveZCD(address src, address dst, uint end, uint rad);
+    event MintZCD(address usr, uint end, bytes32 class, uint rad);
+    event BurnZCD(address usr, uint end, bytes32 class, uint rad);
+    event MoveZCD(address src, address dst, uint end, bytes32 class, uint rad);
 
-    event MintDCP(address usr, uint start, uint end, uint wad);
-    event BurnDCP(address usr, uint start, uint end, uint wad);
-    event MoveDCP(address src, address dst, uint start, uint end, uint wad);
+    event MintDCP(address usr, uint start, uint end, bytes32 class, uint wad);
+    event BurnDCP(address usr, uint start, uint end, bytes32 class, uint wad);
+    event MoveDCP(address src, address dst, uint start, uint end, bytes32 class, uint wad);
     event ChiSnapshot(uint time, uint chi);
 
     // --- Private functions ---
@@ -86,7 +86,7 @@ contract ZCD {
 
         zcd[usr][class] = add(zcd[usr][class], rad);
         totalSupply = add(totalSupply, rad);
-        emit MintZCD(usr, end, rad);
+        emit MintZCD(usr, end, class, rad);
     }
 
     function burnZCD(address usr, uint end, uint rad) private {
@@ -97,7 +97,7 @@ contract ZCD {
 
         zcd[usr][class] = sub(zcd[usr][class], rad);
         totalSupply = sub(totalSupply, rad);
-        emit BurnZCD(usr, end, rad);
+        emit BurnZCD(usr, end, class, rad);
     }
 
     function mintDCP(address usr, uint start, uint end, uint wad) private {
@@ -105,7 +105,7 @@ contract ZCD {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         dcp[usr][class] = add(dcp[usr][class], wad);
-        emit MintDCP(usr, start, end, wad);
+        emit MintDCP(usr, start, end, class, wad);
     }
 
     function burnDCP(address usr, uint start, uint end, uint wad) private {
@@ -115,7 +115,7 @@ contract ZCD {
         require(dcp[usr][class] >= wad, "dcp/insufficient-balance");
 
         dcp[usr][class] = sub(dcp[usr][class], wad);
-        emit BurnDCP(usr, start, end, wad);
+        emit BurnDCP(usr, start, end, class, wad);
     }
 
     // --- External and Public functions ---
@@ -128,7 +128,7 @@ contract ZCD {
         zcd[src][class] = sub(zcd[src][class], rad);
         zcd[dst][class] = add(zcd[dst][class], rad);
 
-        emit MoveZCD(src, dst, end, rad);
+        emit MoveZCD(src, dst, end, class, rad);
     }
 
     // Transfers DCP balance of a certain class
@@ -140,7 +140,7 @@ contract ZCD {
         dcp[src][class] = sub(dcp[src][class], wad);
         dcp[dst][class] = add(dcp[dst][class], wad);
 
-        emit MoveDCP(src, dst, start, end, wad);
+        emit MoveDCP(src, dst, start, end, class, wad);
     }
 
     // Locks dai in DSR contract to mint ZCD and DCP balance
