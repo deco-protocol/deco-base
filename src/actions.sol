@@ -14,7 +14,17 @@ contract JugLike {
     function drip(bytes32) public returns (uint);
 }
 
+contract PotLike {
+    function vat() public returns (VatLike);
+    function chi() external returns (uint ray);
+    function rho() external returns (uint);
+    function drip() public returns (uint);
+    function join(uint wad) public;
+    function exit(uint wad) public;
+}
+
 contract ZCDLike {
+    function pot() external returns (PotLike);
     function zcd(address, bytes32) external returns (uint);
     function dcp(address, bytes32) external returns (uint);
     function chi(uint, uint) external returns (uint);
@@ -33,7 +43,7 @@ contract ZCDLike {
 }
 
 contract Common {
-    uint256 constant RAY = 10 ** 27;
+    uint256 constant ONE = 10 ** 27;
 
     function mul(uint x, uint y) internal pure returns (uint z) {
         require(y == 0 || (z = x * y) / y == x, "mul-overflow");
@@ -41,6 +51,10 @@ contract Common {
 
     function sub(uint x, uint y) internal pure returns (uint z) {
         require((z = x - y) <= x, "sub-overflow");
+    }
+
+    function rdiv(uint x, uint y) internal pure returns (uint z) {
+        z = mul(x, ONE) / y;
     }
 
     function toInt(uint x) internal pure returns (int y) {
@@ -54,10 +68,17 @@ contract Common {
 }
 
 contract ZCDProxyActions is Common {
+    // Calc and Issue
+    function calcAndIssue(address zcd_, address usr, uint end, uint val) public {
+        ZCDLike zcd = ZCDLike(zcd_);
+
+        uint wad = rdiv(val, zcd.pot().drip());
+        zcd.issue(usr, end, wad);
+    }
+
     // Claim and Withdraw
     function claimAndWithdraw(address zcd_, address usr, uint start, uint end, uint wad) public {
         ZCDLike zcd = ZCDLike(zcd_);
-        require(zcd.approvals(usr, msg.sender));
 
         zcd.claim(usr, start, end, now);
         zcd.withdraw(usr, end, wad);
@@ -77,7 +98,7 @@ contract ZCDProxyActions is Common {
         VatLike vat = VatLike(vat_);
 
         uint rate = JugLike(jug).drip(ilk_);
-        int  dart = toInt(mul(wad, RAY) / rate) + 1; // additional wei to fix precision issues
+        int  dart = toInt(mul(wad, ONE) / rate) + 1; // additional wei to fix precision issues
         vat.frob(ilk_, usr, usr, usr, 0, dart);
         zcd.issue(usr, end, wad);
     }
