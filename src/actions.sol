@@ -76,6 +76,14 @@ contract ZCDProxyActions is Common {
         zcd.issue(usr, end, wad);
     }
 
+    // Calc and Redeem
+    function calcAndRedeem(address zcd_, address usr, uint end, uint val) public {
+        ZCDLike zcd = ZCDLike(zcd_);
+
+        uint wad = val / zcd.pot().drip(); // rad / ray -> wad
+        zcd.redeem(usr, end, wad);
+    }
+
     // Claim and Withdraw
     function claimAndWithdraw(address zcd_, address usr, uint start, uint end, uint wad) public {
         ZCDLike zcd = ZCDLike(zcd_);

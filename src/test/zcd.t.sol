@@ -127,4 +127,19 @@ contract ZCDTest is DSTest {
         assertEq(zcd.dcp(self, dcpClass2), 0 ether);
         assertEq(wad(vat.dai(self)), wad(mul(val, pot.drip())) + 90 ether - 2 wei);
     }
+
+    function test_redeem_zcd() public {
+        uint val = rdiv(10 ether, pot.drip());
+
+        zcd.issue(self, day(2), val);
+
+        bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
+        bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
+
+        hevm.warp(day(4));
+        zcd.redeem(self, day(2), zcd.zcd(self, zcdClass) / pot.drip());
+
+        assertEq(wad(zcd.zcd(self, zcdClass)), 0);
+        assertEq(zcd.dcp(self, dcpClass), val);
+    }
 }
