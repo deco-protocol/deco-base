@@ -194,15 +194,15 @@ contract ZCD {
     }
 
     // Claims DCP coupon payments and deposits them as dai
-    function claim(address usr, uint start, uint end, uint time) external {
+    function claim(address usr, uint start, uint end, uint time) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         uint wad = dcp[usr][class];
-        snapshot();
-
-        require((chi[start] != 0) && (chi[time] != 0) && (chi[time] > chi[start]));
-        require((start <= time) && (time <= end));
         require(wad > 0);
+        require((start <= time) && (time <= end));
+
+        snapshot();
+        require((chi[start] != 0) && (chi[time] != 0) && (chi[time] > chi[start]));
 
         burnDCP(usr, start, end, wad);
         mintDCP(usr, time, end, rdiv(rmul(wad, chi[start]), chi[time])); // division rounds down wad
