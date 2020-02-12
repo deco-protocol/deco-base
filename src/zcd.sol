@@ -80,7 +80,7 @@ contract ZCD {
     event ChiSnapshot(uint time, uint chi);
 
     // --- Private functions ---
-    function mintZCD(address usr, uint end, uint rad) private {
+    function mintZCD(address usr, uint end, uint rad) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         zcd[usr][class] = add(zcd[usr][class], rad);
@@ -88,7 +88,7 @@ contract ZCD {
         emit MintZCD(usr, end, class, rad);
     }
 
-    function burnZCD(address usr, uint end, uint rad) private {
+    function burnZCD(address usr, uint end, uint rad) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         require(zcd[usr][class] >= rad, "zcd/insufficient-balance");
@@ -98,14 +98,14 @@ contract ZCD {
         emit BurnZCD(usr, end, class, rad);
     }
 
-    function mintDCP(address usr, uint start, uint end, uint wad) private {
+    function mintDCP(address usr, uint start, uint end, uint wad) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         dcp[usr][class] = add(dcp[usr][class], wad);
         emit MintDCP(usr, start, end, class, wad);
     }
 
-    function burnDCP(address usr, uint start, uint end, uint wad) private {
+    function burnDCP(address usr, uint start, uint end, uint wad) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         require(dcp[usr][class] >= wad, "dcp/insufficient-balance");
