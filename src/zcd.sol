@@ -201,16 +201,19 @@ contract ZCD {
         require(pie > 0);
         require((start <= time) && (time <= end));
 
-        snapshot();
-        require((chi[start] != 0) && (chi[time] != 0) && (chi[time] > chi[start]));
+        uint chiNow = snapshot();
+        uint chiStart = chi[start];
+        uint chiTime = chi[time];
+
+        require((chiStart != 0) && (chiTime != 0) && (chiTime > chiStart));
 
         burnDCP(usr, start, end, pie);
-        mintDCP(usr, time, end, rdiv(rmul(pie, chi[start]), chi[time])); // division rounds down wad
+        mintDCP(usr, time, end, rdiv(rmul(pie, chiStart), chiTime)); // division rounds down wad
 
-        uint val = mul(pie, sub(chi[time], chi[start])) / chi[now]; // wad * ray / ray -> wad
+        uint pieOut = mul(pie, sub(chiTime, chiStart)) / chiNow; // wad * ray / ray -> wad
 
-        pot.exit(val);
-        vat.move(address(this), usr, mul(val, chi[now]));
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 
     // Splits a single DCP into two contiguous DCPs
