@@ -19,8 +19,8 @@ contract PotLike {
     function chi() external returns (uint ray);
     function rho() external returns (uint);
     function drip() public returns (uint);
-    function join(uint wad) public;
-    function exit(uint wad) public;
+    function join(uint pie) public;
+    function exit(uint pie) public;
 }
 
 contract ZCDLike {
@@ -69,27 +69,27 @@ contract Common {
 
 contract ZCDProxyActions is Common {
     // Calc and Issue
-    function calcAndIssue(address zcd_, address usr, uint end, uint val) public {
+    function calcAndIssue(address zcd_, address usr, uint end, uint dai) public {
         ZCDLike zcd = ZCDLike(zcd_);
 
-        uint wad = rdiv(val, zcd.pot().drip());
-        zcd.issue(usr, end, wad);
+        uint pie = rdiv(dai, zcd.pot().drip());
+        zcd.issue(usr, end, pie);
     }
 
     // Calc and Redeem
-    function calcAndRedeem(address zcd_, address usr, uint end, uint val) public {
+    function calcAndRedeem(address zcd_, address usr, uint end, uint dai) public {
         ZCDLike zcd = ZCDLike(zcd_);
 
-        uint wad = val / zcd.pot().drip(); // rad / ray -> wad
-        zcd.redeem(usr, end, wad);
+        uint pie = dai / zcd.pot().drip(); // rad / ray -> wad
+        zcd.redeem(usr, end, pie);
     }
 
     // Claim and Withdraw
-    function claimAndWithdraw(address zcd_, address usr, uint start, uint end, uint wad) public {
+    function claimAndWithdraw(address zcd_, address usr, uint start, uint end, uint pie) public {
         ZCDLike zcd = ZCDLike(zcd_);
 
         zcd.claim(usr, start, end, now);
-        zcd.withdraw(usr, end, wad);
+        zcd.withdraw(usr, end, pie);
     }
 
     // Generate Dai and Issue ZCD
@@ -100,15 +100,15 @@ contract ZCDProxyActions is Common {
         bytes32 ilk_,
         address usr,
         uint end,
-        uint wad
+        uint pie
     ) public {
         ZCDLike zcd = ZCDLike(zcd_);
         VatLike vat = VatLike(vat_);
 
         uint rate = JugLike(jug).drip(ilk_);
-        int  dart = toInt(mul(wad, ONE) / rate) + 1; // additional wei to fix precision issues
+        int  dart = toInt(mul(pie, ONE) / rate) + 1; // additional wei to fix precision issues
         vat.frob(ilk_, usr, usr, usr, 0, dart);
-        zcd.issue(usr, end, wad);
+        zcd.issue(usr, end, pie);
     }
 
     // Claim and payback stability fee

@@ -65,8 +65,8 @@ contract ERC20 is LibNote {
     mapping (address => mapping (address => uint)) public allowance;
     mapping (address => uint)                      public nonces;
 
-    event Approval(address indexed src, address indexed guy, uint wad);
-    event Transfer(address indexed src, address indexed dst, uint wad);
+    event Approval(address indexed src, address indexed guy, uint val);
+    event Transfer(address indexed src, address indexed dst, uint val);
 
     // --- Math ---
     function add(uint x, uint y) internal pure returns (uint z) {
@@ -99,52 +99,52 @@ contract ERC20 is LibNote {
     }
 
     // --- Token ---
-    function transfer(address dst, uint wad) external returns (bool) {
-        return transferFrom(msg.sender, dst, wad);
+    function transfer(address dst, uint val) external returns (bool) {
+        return transferFrom(msg.sender, dst, val);
     }
-    function transferFrom(address src, address dst, uint wad)
+    function transferFrom(address src, address dst, uint val)
         public returns (bool)
     {
-        require(balanceOf[src] >= wad, "insufficient-balance");
+        require(balanceOf[src] >= val, "insufficient-balance");
         if (src != msg.sender && allowance[src][msg.sender] != uint(-1)) {
-            require(allowance[src][msg.sender] >= wad, "insufficient-allowance");
-            allowance[src][msg.sender] = sub(allowance[src][msg.sender], wad);
+            require(allowance[src][msg.sender] >= val, "insufficient-allowance");
+            allowance[src][msg.sender] = sub(allowance[src][msg.sender], val);
         }
-        balanceOf[src] = sub(balanceOf[src], wad);
-        balanceOf[dst] = add(balanceOf[dst], wad);
-        emit Transfer(src, dst, wad);
+        balanceOf[src] = sub(balanceOf[src], val);
+        balanceOf[dst] = add(balanceOf[dst], val);
+        emit Transfer(src, dst, val);
         return true;
     }
-    function mint(address usr, uint wad) external auth {
-        balanceOf[usr] = add(balanceOf[usr], wad);
-        totalSupply    = add(totalSupply, wad);
-        emit Transfer(address(0), usr, wad);
+    function mint(address usr, uint val) external auth {
+        balanceOf[usr] = add(balanceOf[usr], val);
+        totalSupply    = add(totalSupply, val);
+        emit Transfer(address(0), usr, val);
     }
-    function burn(address usr, uint wad) external {
-        require(balanceOf[usr] >= wad, "insufficient-balance");
+    function burn(address usr, uint val) external {
+        require(balanceOf[usr] >= val, "insufficient-balance");
         if (usr != msg.sender && allowance[usr][msg.sender] != uint(-1)) {
-            require(allowance[usr][msg.sender] >= wad, "insufficient-allowance");
-            allowance[usr][msg.sender] = sub(allowance[usr][msg.sender], wad);
+            require(allowance[usr][msg.sender] >= val, "insufficient-allowance");
+            allowance[usr][msg.sender] = sub(allowance[usr][msg.sender], val);
         }
-        balanceOf[usr] = sub(balanceOf[usr], wad);
-        totalSupply    = sub(totalSupply, wad);
-        emit Transfer(usr, address(0), wad);
+        balanceOf[usr] = sub(balanceOf[usr], val);
+        totalSupply    = sub(totalSupply, val);
+        emit Transfer(usr, address(0), val);
     }
-    function approve(address usr, uint wad) external returns (bool) {
-        allowance[msg.sender][usr] = wad;
-        emit Approval(msg.sender, usr, wad);
+    function approve(address usr, uint val) external returns (bool) {
+        allowance[msg.sender][usr] = val;
+        emit Approval(msg.sender, usr, val);
         return true;
     }
 
     // --- Alias ---
-    function push(address usr, uint wad) external {
-        transferFrom(msg.sender, usr, wad);
+    function push(address usr, uint val) external {
+        transferFrom(msg.sender, usr, val);
     }
-    function pull(address usr, uint wad) external {
-        transferFrom(usr, msg.sender, wad);
+    function pull(address usr, uint val) external {
+        transferFrom(usr, msg.sender, val);
     }
-    function move(address src, address dst, uint wad) external {
-        transferFrom(src, dst, wad);
+    function move(address src, address dst, uint val) external {
+        transferFrom(src, dst, val);
     }
 
     // --- Approve by signature ---
@@ -167,8 +167,8 @@ contract ERC20 is LibNote {
         require(holder == ecrecover(digest, v, r, s), "invalid-permit");
         require(expiry == 0 || now <= expiry, "permit-expired");
         require(nonce == nonces[holder]++, "invalid-nonce");
-        uint wad = allowed ? uint(-1) : 0;
-        allowance[holder][spender] = wad;
-        emit Approval(holder, spender, wad);
+        uint val = allowed ? uint(-1) : 0;
+        allowance[holder][spender] = val;
+        emit Approval(holder, spender, val);
     }
 }

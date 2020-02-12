@@ -35,18 +35,18 @@ contract ZCDAdapterERC20 {
         tokens[class] = address(token);
     }
 
-    function join(address usr, uint end, uint rad) external approved(usr) {
+    function join(address usr, uint end, uint dai) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        ERC20(tokens[class]).mint(usr, rad);
-        zcd.moveZCD(usr, address(this), end, rad);
+        ERC20(tokens[class]).mint(usr, dai);
+        zcd.moveZCD(usr, address(this), end, dai);
     }
 
-    function exit(address usr, uint end, uint rad) external approved(usr) {
+    function exit(address usr, uint end, uint dai) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        ERC20(tokens[class]).burn(usr, rad);
-        zcd.moveZCD(address(this), usr, end, rad);
+        ERC20(tokens[class]).burn(usr, dai);
+        zcd.moveZCD(address(this), usr, end, dai);
     }
 }
 
@@ -77,17 +77,17 @@ contract DCPAdapterERC20 {
         tokens[class] = address(token);
     }
 
-    function join(address usr, uint start, uint end, uint wad) external approved(usr) {
+    function join(address usr, uint start, uint end, uint pie) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        ERC20(tokens[class]).mint(usr, wad);
-        zcd.moveDCP(usr, address(this), start, end, wad);
+        ERC20(tokens[class]).mint(usr, pie);
+        zcd.moveDCP(usr, address(this), start, end, pie);
     }
 
-    function exit(address usr, uint start, uint end, uint wad) external approved(usr) {
+    function exit(address usr, uint start, uint end, uint pie) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        ERC20(tokens[class]).burn(usr, wad);
-        zcd.moveDCP(address(this), usr, start, end, wad);
+        ERC20(tokens[class]).burn(usr, pie);
+        zcd.moveDCP(address(this), usr, start, end, pie);
     }
 }
