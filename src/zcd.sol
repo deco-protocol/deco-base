@@ -79,7 +79,7 @@ contract ZCD {
     event MoveDCP(address src, address dst, uint start, uint end, bytes32 class, uint pie);
     event ChiSnapshot(uint time, uint chi);
 
-    // --- Private functions ---
+    // --- Internal functions ---
     function mintZCD(address usr, uint end, uint dai) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
@@ -139,6 +139,13 @@ contract ZCD {
         emit MoveDCP(src, dst, start, end, class, pie);
     }
 
+    // Snapshots chi value at a particular time
+    function snapshot() public returns (uint chi_) {
+        chi_ = pot.drip();
+        chi[now] = chi_;
+        emit ChiSnapshot(now, chi_);
+    }
+
     // Locks dai in DSR contract to mint ZCD and DCP balance
     function issue(address usr, uint end, uint pie) external approved(usr) {
         require(now <= end);
@@ -151,16 +158,6 @@ contract ZCD {
         mintDCP(usr, now, end, pie);
     }
 
-    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
-    function withdraw(address usr, uint end, uint pie) external approved(usr) {
-        uint dai = mul(pie, snapshot());
-        pot.exit(pie);
-        vat.move(address(this), usr, dai);
-
-        burnZCD(usr, end, dai);
-        burnDCP(usr, now, end, pie); // DCP should be fully claimed
-    }
-
     // Redeem ZCD for dai after maturity
     function redeem(address usr, uint end, uint pie) external approved(usr) {
         require(now > end);
@@ -170,27 +167,6 @@ contract ZCD {
         vat.move(address(this), usr, dai);
 
         burnZCD(usr, end, dai);
-    }
-
-    // Snapshots chi value at a particular time
-    function snapshot() public returns (uint chi_) {
-        chi_ = pot.drip();
-        chi[now] = chi_;
-        emit ChiSnapshot(now, chi_);
-    }
-
-    // Sets DCP start to time for which a snapshot is available
-    function activate(address usr, uint start, uint end, uint time) external approved(usr) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
-
-        require(chi[start] == 0);
-        require(chi[time] != 0);
-        require(start <= time && time <= end);
-        require(start != time);
-        
-        uint pie = dcp[usr][class];
-        burnDCP(usr, start, end, pie);
-        mintDCP(usr, time, end, pie);
     }
 
     // Claims DCP coupon payments and deposits them as dai
@@ -216,6 +192,16 @@ contract ZCD {
         vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 
+    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
+    function withdraw(address usr, uint end, uint pie) external approved(usr) {
+        uint dai = mul(pie, snapshot());
+        pot.exit(pie);
+        vat.move(address(this), usr, dai);
+
+        burnZCD(usr, end, dai);
+        burnDCP(usr, now, end, pie); // DCP should be fully claimed
+    }
+
     // Splits a single DCP into two contiguous DCPs
     function split(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3);
@@ -223,6 +209,20 @@ contract ZCD {
         burnDCP(usr, t1, t3, pie);
         mintDCP(usr, t1, t2, pie);
         mintDCP(usr, t2, t3, pie);
+    }
+
+    // Sets DCP start to time for which a snapshot is available
+    function activate(address usr, uint start, uint end, uint time) external approved(usr) {
+        bytes32 class = keccak256(abi.encodePacked(start, end));
+
+        require(chi[start] == 0);
+        require(chi[time] != 0);
+        require(start <= time && time <= end);
+        require(start != time);
+        
+        uint pie = dcp[usr][class];
+        burnDCP(usr, start, end, pie);
+        mintDCP(usr, time, end, pie);
     }
 
     // Merges two contiguous DCPs into a single DCP
