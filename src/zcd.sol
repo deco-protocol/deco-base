@@ -72,11 +72,13 @@ contract ZCD {
 
     event MintZCD(address usr, uint end, bytes32 class, uint dai);
     event BurnZCD(address usr, uint end, bytes32 class, uint dai);
-    event MoveZCD(address src, address dst, uint end, bytes32 class, uint dai);
-
     event MintDCP(address usr, uint start, uint end, bytes32 class, uint pie);
     event BurnDCP(address usr, uint start, uint end, bytes32 class, uint pie);
-    event MoveDCP(address src, address dst, uint start, uint end, bytes32 class, uint pie);
+    event MintFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
+    event BurnFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
+
+    event MoveZCD(address src, address dst, bytes32 class, uint dai);
+    event MoveDCP(address src, address dst, bytes32 class, uint pie);
     event ChiSnapshot(uint time, uint chi);
 
     // --- Internal functions ---
@@ -114,29 +116,41 @@ contract ZCD {
         emit BurnDCP(usr, start, end, class, pie);
     }
 
+    function mintFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+
+        dcp[usr][class] = add(dcp[usr][class], pie);
+        emit MintFutureDCP(usr, start, split, end, class, pie);
+    }
+
+    function burnFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+
+        require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
+
+        dcp[usr][class] = sub(dcp[usr][class], pie);
+        emit BurnFutureDCP(usr, start, split, end, class, pie);
+    }
+
     // --- External and Public functions ---
     // Transfers ZCD balance of a certain class
-    function moveZCD(address src, address dst, uint end, uint dai) external approved(src) {
-        bytes32 class = keccak256(abi.encodePacked(end));
-
+    function moveZCD(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(zcd[src][class] >= dai, "zcd/insufficient-balance");
 
         zcd[src][class] = sub(zcd[src][class], dai);
         zcd[dst][class] = add(zcd[dst][class], dai);
 
-        emit MoveZCD(src, dst, end, class, dai);
+        emit MoveZCD(src, dst, class, dai);
     }
 
     // Transfers DCP balance of a certain class
-    function moveDCP(address src, address dst, uint start, uint end, uint pie) external approved(src) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
-
+    function moveDCP(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(dcp[src][class] >= pie, "dcp/insufficient-balance");
 
         dcp[src][class] = sub(dcp[src][class], pie);
         dcp[dst][class] = add(dcp[dst][class], pie);
 
-        emit MoveDCP(src, dst, start, end, class, pie);
+        emit MoveDCP(src, dst, class, pie);
     }
 
     // Snapshots chi value at a particular time
@@ -202,35 +216,55 @@ contract ZCD {
         burnDCP(usr, now, end, pie); // DCP should be fully claimed
     }
 
-    // Splits a single DCP into two contiguous DCPs
+    // Splits a DCP balance into two contiguous DCP balances(current, future)
     function split(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3);
 
         burnDCP(usr, t1, t3, pie);
         mintDCP(usr, t1, t2, pie);
-        mintDCP(usr, t2, t3, pie);
+        mintFutureDCP(usr, t1, t2, t3, pie); // (t1 * pie) balance can be activated later from t2 to t3
     }
 
-    // Sets DCP start to time for which a snapshot is available
-    function activate(address usr, uint start, uint end, uint time) external approved(usr) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
+    // Splits a future DCP balance into two contiguous future DCP balances
+    function split(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 < t2 && t2 < t3 && t3 < t4);
 
-        require(chi[start] == 0);
-        require(chi[time] != 0);
-        require(start <= time && time <= end);
-        require(start != time);
-        
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintFutureDCP(usr, t1, t2, t3, pie);
+        mintFutureDCP(usr, t1, t3, t4, pie);
+    }
+
+    // Activates a future DCP balance to make it current
+    function activate(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) {
+        bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
+
+        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
+        require(chi[t1] != 0); // used to retrieve original notional amount
+        require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
+
         uint pie = dcp[usr][class];
-        burnDCP(usr, start, end, pie);
-        mintDCP(usr, time, end, pie);
+        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
+
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintDCP(usr, t3, t4, newpie); // savings earnt lost from t2 to t3 when they aren't equal
     }
 
-    // Merges two contiguous DCPs into a single DCP
-    function merge(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
-        require(t1 < t2 && t2 < t3);
+    // Merges two continguous DCP balances(current, future) into one DCP balance
+    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie1, uint pie2) external approved(usr) {
+        require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
+        require(mul(t1, pie1) == mul(t2, pie2)); // notional amonuts need to be equal
 
-        burnDCP(usr, t1, t2, pie);
-        burnDCP(usr, t2, t3, pie);
-        mintDCP(usr, t1, t3, pie);
+        burnDCP(usr, t2, t3, pie2);
+        burnFutureDCP(usr, t1, t3, t4, pie1);
+        mintDCP(usr, t2, t4, pie2);
+    }
+
+    // Merges two continguous future DCP balances into one future DCP balance
+    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 < t2 && t2 < t3 && t3 < t4);
+
+        burnFutureDCP(usr, t1, t2, t3, pie);
+        burnFutureDCP(usr, t1, t3, t4, pie);
+        mintFutureDCP(usr, t1, t2, t4, pie);
     }
 }
