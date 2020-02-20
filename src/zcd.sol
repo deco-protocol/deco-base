@@ -226,7 +226,7 @@ contract ZCD {
     }
 
     // Splits a future DCP balance into two contiguous future DCP balances
-    function split(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+    function splitFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
 
         burnFutureDCP(usr, t1, t2, t4, pie);
@@ -250,17 +250,17 @@ contract ZCD {
     }
 
     // Merges two continguous DCP balances(current, future) into one DCP balance
-    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie1, uint pie2) external approved(usr) {
+    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
-        require(mul(t1, pie1) == mul(t2, pie2)); // notional amonuts need to be equal
+        uint futurePie = (t1 == t2) ? pie : mul(pie, chi[t2]) / chi[t1];
 
-        burnDCP(usr, t2, t3, pie2);
-        burnFutureDCP(usr, t1, t3, t4, pie1);
-        mintDCP(usr, t2, t4, pie2);
+        burnDCP(usr, t2, t3, pie);
+        burnFutureDCP(usr, t1, t3, t4, futurePie);
+        mintDCP(usr, t2, t4, pie);
     }
 
     // Merges two continguous future DCP balances into one future DCP balance
-    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+    function mergeFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
 
         burnFutureDCP(usr, t1, t2, t3, pie);

@@ -30,16 +30,18 @@ contract ZCDLike {
     function chi(uint, uint) external returns (uint);
     function totalSupply() external returns (uint);
     function approvals(address, address) external returns (bool);
-    function moveZCD(address, address, uint, uint) external;
-    function moveDCP(address, address, uint, uint, uint) external;
-    function issue(address, uint, uint) external;
-    function withdraw(address, uint, uint) external;
-    function redeem(address, uint, uint) external;
+    function moveZCD(address, address, bytes32, uint) external;
+    function moveDCP(address, address, bytes32, uint) external;
     function snapshot() public returns (uint);
-    function activate(address, uint, uint, uint) external;
+    function issue(address, uint, uint) external;
+    function redeem(address, uint, uint) external;
     function claim(address, uint, uint, uint) external;
+    function withdraw(address, uint, uint) external;
     function split(address, uint, uint, uint, uint) external;
-    function merge(address, uint, uint, uint, uint) external;
+    function splitFuture(address, uint, uint, uint, uint, uint) external;
+    function activate(address, uint, uint, uint, uint) external;
+    function merge(address, uint, uint, uint, uint, uint) external;
+    function mergeFuture(address, uint, uint, uint, uint, uint) external;
 }
 
 contract Common {

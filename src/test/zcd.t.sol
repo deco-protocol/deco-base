@@ -142,4 +142,95 @@ contract ZCDTest is DSTest {
         assertEq(wad(zcd.zcd(self, zcdClass)), 0);
         assertEq(zcd.dcp(self, dcpClass), val);
     }
+
+    function test_split_activate_claim_dcp() public {
+        uint chi_1 = pot.drip();
+        uint val = rdiv(10 ether, chi_1);
+
+        zcd.issue(self, day(20), val);
+
+        bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
+        assertEq(zcd.dcp(self, class1), val);
+
+        zcd.split(self, day(1), day(5), day(20), val);
+        bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
+        bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
+        assertEq(zcd.dcp(self, class2), val);
+        assertEq(zcd.dcp(self, class3), val);
+
+        hevm.warp(day(5));
+        zcd.claim(self, day(1), day(5), now);
+        assertEq(zcd.dcp(self, class1), 0);
+
+        hevm.warp(day(6));
+        uint chi_6 = zcd.snapshot();
+        uint val_6 = (mul(val, chi_1) / chi_6);
+        zcd.activate(self, day(1), day(5), day(6), day(20));
+        bytes32 class4 = keccak256(abi.encodePacked(day(6), day(20)));
+        assertEq(zcd.dcp(self, class4), val_6);
+
+        hevm.warp(day(7));
+        uint chi_7 = zcd.snapshot();
+        uint val_7 = (mul(val_6, chi_6) / chi_7);
+        zcd.claim(self, day(6), day(20), now);
+        bytes32 class5 = keccak256(abi.encodePacked(day(7), day(20)));
+        assertEq(zcd.dcp(self, class4), 0);
+        assertEq(zcd.dcp(self, class5), val_7);
+    }
+
+    function test_split_claim_merge_dcp() public {
+        uint chi_1 = pot.drip();
+        uint val_1 = rdiv(10 ether, chi_1);
+
+        zcd.issue(self, day(20), val_1);
+
+        bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
+        assertEq(zcd.dcp(self, class1), val_1);
+
+        zcd.split(self, day(1), day(5), day(20), val_1);
+        bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
+        bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
+        assertEq(zcd.dcp(self, class2), val_1);
+        assertEq(zcd.dcp(self, class3), val_1);
+
+        hevm.warp(day(2));
+        uint chi_2 = zcd.snapshot();
+        uint val_2 = (mul(val_1, chi_1) / chi_2);
+        zcd.claim(self, day(1), day(5), now);
+        bytes32 class4 = keccak256(abi.encodePacked(day(2), day(5)));
+        assertEq(zcd.dcp(self, class1), 0);
+        assertEq(zcd.dcp(self, class4), val_2 - 1 wei);
+
+        zcd.merge(self, day(1), day(2), day(5), day(20), zcd.dcp(self, class4));
+        bytes32 class5 = keccak256(abi.encodePacked(day(2), day(20)));
+        assertEq(zcd.dcp(self, class3), 2 wei);
+        assertEq(zcd.dcp(self, class4), 0);
+        assertEq(zcd.dcp(self, class5), val_2 - 1 wei);
+    }
+
+    function test_split_merge_future_dcp() public {
+        uint chi_1 = pot.drip();
+        uint val = rdiv(10 ether, chi_1);
+
+        zcd.issue(self, day(20), val);
+        bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
+        
+        zcd.split(self, day(1), day(5), day(20), val);
+        bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
+        bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
+        
+        zcd.splitFuture(self, day(1), day(5), day(11), day(20), val);
+        bytes32 class4 = keccak256(abi.encodePacked(day(1), day(5), day(11)));
+        bytes32 class5 = keccak256(abi.encodePacked(day(1), day(11), day(20)));
+        assertEq(zcd.dcp(self, class1), 0);
+        assertEq(zcd.dcp(self, class2), val);
+        assertEq(zcd.dcp(self, class3), 0);
+        assertEq(zcd.dcp(self, class4), val);
+        assertEq(zcd.dcp(self, class5), val);
+
+        zcd.mergeFuture(self, day(1), day(5), day(11), day(20), val);
+        assertEq(zcd.dcp(self, class3), val);
+        assertEq(zcd.dcp(self, class4), 0);
+        assertEq(zcd.dcp(self, class5), 0);
+    }
 }
