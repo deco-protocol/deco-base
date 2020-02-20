@@ -5,21 +5,21 @@ import {Dai} from "dss/dai.sol";
 import {DaiJoin} from "dss/join.sol";
 import {Vat} from "dss/vat.sol";
 import {Pot} from "dss/pot.sol";
-import "../zcd.sol";
+import "../split.sol";
 
 contract Hevm {
     function warp(uint256) public;
 }
 
 contract User {
-    ZCD zcd;
+    SplitDSR split;
 
-    constructor(ZCD zcd_) public {
-        zcd = zcd_;
+    constructor(SplitDSR split_) public {
+        split = split_;
     }
 }
 
-contract ZCDTest is DSTest {
+contract SplitDSRTest is DSTest {
     Hevm hevm;
 
     Vat vat;
@@ -27,7 +27,7 @@ contract ZCDTest is DSTest {
     Dai dai;
     DaiJoin adapter;
 
-    ZCD zcd;
+    SplitDSR split;
 
     address vow;
     address self;
@@ -81,14 +81,14 @@ contract ZCDTest is DSTest {
         dai.rely(address(adapter));        
         pot.file("vow", vow);
 
-        zcd = new ZCD(address(pot));
+        split = new SplitDSR(address(pot));
 
         vat.hope(address(pot));
         vat.hope(address(adapter));
-        vat.hope(address(zcd));
+        vat.hope(address(split));
 
         dai.approve(address(adapter), uint(-1));
-        dai.approve(address(zcd), uint(-1));
+        dai.approve(address(split), uint(-1));
 
         vat.suck(self, self, rad(200 ether));
         adapter.exit(address(this), 100 ether);
@@ -100,137 +100,137 @@ contract ZCDTest is DSTest {
     function test_issue_zcd_and_dcp() public {
         uint val = rdiv(10 ether, pot.drip());
 
-        zcd.issue(self, day(2), val);
+        split.issue(self, day(2), val);
 
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
         bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
 
-        assertEq(zcd.zcd(self, zcdClass), mul(val, pot.drip()));
-        assertEq(zcd.dcp(self, dcpClass), val);
+        assertEq(split.zcd(self, zcdClass), mul(val, pot.drip()));
+        assertEq(split.dcp(self, dcpClass), val);
     }
 
     function test_withdraw_dai_before_expiry() public {
         uint val = rdiv(10 ether, pot.drip());
         
-        zcd.issue(self, day(3), val);
+        split.issue(self, day(3), val);
         hevm.warp(day(2));
         
         bytes32 zcdClass = keccak256(abi.encodePacked(day(3)));
         bytes32 dcpClass1 = keccak256(abi.encodePacked(day(1), day(3)));
         bytes32 dcpClass2 = keccak256(abi.encodePacked(day(2), day(3)));
 
-        zcd.claim(self, day(1), day(3), now);
-        zcd.withdraw(self, day(3), zcd.dcp(self, dcpClass2));
+        split.claim(self, day(1), day(3), now);
+        split.withdraw(self, day(3), split.dcp(self, dcpClass2));
         
-        assertEq(wad(zcd.zcd(self, zcdClass)), 1 wei); // dcp balance 1 wei lower after claim due to rounding
-        assertEq(zcd.dcp(self, dcpClass1), 0 ether);
-        assertEq(zcd.dcp(self, dcpClass2), 0 ether);
+        assertEq(wad(split.zcd(self, zcdClass)), 1 wei); // dcp balance 1 wei lower after claim due to rounding
+        assertEq(split.dcp(self, dcpClass1), 0 ether);
+        assertEq(split.dcp(self, dcpClass2), 0 ether);
         assertEq(wad(vat.dai(self)), wad(mul(val, pot.drip())) + 90 ether - 2 wei);
     }
 
     function test_redeem_zcd() public {
         uint val = rdiv(10 ether, pot.drip());
 
-        zcd.issue(self, day(2), val);
+        split.issue(self, day(2), val);
 
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
         bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
 
         hevm.warp(day(4));
-        zcd.redeem(self, day(2), zcd.zcd(self, zcdClass) / pot.drip());
+        split.redeem(self, day(2), split.zcd(self, zcdClass) / pot.drip());
 
-        assertEq(wad(zcd.zcd(self, zcdClass)), 0);
-        assertEq(zcd.dcp(self, dcpClass), val);
+        assertEq(wad(split.zcd(self, zcdClass)), 0);
+        assertEq(split.dcp(self, dcpClass), val);
     }
 
-    function test_split_activate_claim_dcp() public {
+    function test_slice_start_claim_dcp() public {
         uint chi_1 = pot.drip();
         uint val = rdiv(10 ether, chi_1);
 
-        zcd.issue(self, day(20), val);
+        split.issue(self, day(20), val);
 
         bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
-        assertEq(zcd.dcp(self, class1), val);
+        assertEq(split.dcp(self, class1), val);
 
-        zcd.split(self, day(1), day(5), day(20), val);
+        split.slice(self, day(1), day(5), day(20), val);
         bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
         bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
-        assertEq(zcd.dcp(self, class2), val);
-        assertEq(zcd.dcp(self, class3), val);
+        assertEq(split.dcp(self, class2), val);
+        assertEq(split.dcp(self, class3), val);
 
         hevm.warp(day(5));
-        zcd.claim(self, day(1), day(5), now);
-        assertEq(zcd.dcp(self, class1), 0);
+        split.claim(self, day(1), day(5), now);
+        assertEq(split.dcp(self, class1), 0);
 
         hevm.warp(day(6));
-        uint chi_6 = zcd.snapshot();
+        uint chi_6 = split.snapshot();
         uint val_6 = (mul(val, chi_1) / chi_6);
-        zcd.activate(self, day(1), day(5), day(6), day(20));
+        split.start(self, day(1), day(5), day(6), day(20));
         bytes32 class4 = keccak256(abi.encodePacked(day(6), day(20)));
-        assertEq(zcd.dcp(self, class4), val_6);
+        assertEq(split.dcp(self, class4), val_6);
 
         hevm.warp(day(7));
-        uint chi_7 = zcd.snapshot();
+        uint chi_7 = split.snapshot();
         uint val_7 = (mul(val_6, chi_6) / chi_7);
-        zcd.claim(self, day(6), day(20), now);
+        split.claim(self, day(6), day(20), now);
         bytes32 class5 = keccak256(abi.encodePacked(day(7), day(20)));
-        assertEq(zcd.dcp(self, class4), 0);
-        assertEq(zcd.dcp(self, class5), val_7);
+        assertEq(split.dcp(self, class4), 0);
+        assertEq(split.dcp(self, class5), val_7);
     }
 
-    function test_split_claim_merge_dcp() public {
+    function test_slice_claim_merge_dcp() public {
         uint chi_1 = pot.drip();
         uint val_1 = rdiv(10 ether, chi_1);
 
-        zcd.issue(self, day(20), val_1);
+        split.issue(self, day(20), val_1);
 
         bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
-        assertEq(zcd.dcp(self, class1), val_1);
+        assertEq(split.dcp(self, class1), val_1);
 
-        zcd.split(self, day(1), day(5), day(20), val_1);
+        split.slice(self, day(1), day(5), day(20), val_1);
         bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
         bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
-        assertEq(zcd.dcp(self, class2), val_1);
-        assertEq(zcd.dcp(self, class3), val_1);
+        assertEq(split.dcp(self, class2), val_1);
+        assertEq(split.dcp(self, class3), val_1);
 
         hevm.warp(day(2));
-        uint chi_2 = zcd.snapshot();
+        uint chi_2 = split.snapshot();
         uint val_2 = (mul(val_1, chi_1) / chi_2);
-        zcd.claim(self, day(1), day(5), now);
+        split.claim(self, day(1), day(5), now);
         bytes32 class4 = keccak256(abi.encodePacked(day(2), day(5)));
-        assertEq(zcd.dcp(self, class1), 0);
-        assertEq(zcd.dcp(self, class4), val_2 - 1 wei);
+        assertEq(split.dcp(self, class1), 0);
+        assertEq(split.dcp(self, class4), val_2 - 1 wei);
 
-        zcd.merge(self, day(1), day(2), day(5), day(20), zcd.dcp(self, class4));
+        split.merge(self, day(1), day(2), day(5), day(20), split.dcp(self, class4));
         bytes32 class5 = keccak256(abi.encodePacked(day(2), day(20)));
-        assertEq(zcd.dcp(self, class3), 2 wei);
-        assertEq(zcd.dcp(self, class4), 0);
-        assertEq(zcd.dcp(self, class5), val_2 - 1 wei);
+        assertEq(split.dcp(self, class3), 2 wei);
+        assertEq(split.dcp(self, class4), 0);
+        assertEq(split.dcp(self, class5), val_2 - 1 wei);
     }
 
-    function test_split_merge_future_dcp() public {
+    function test_slice_merge_future_dcp() public {
         uint chi_1 = pot.drip();
         uint val = rdiv(10 ether, chi_1);
 
-        zcd.issue(self, day(20), val);
+        split.issue(self, day(20), val);
         bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
         
-        zcd.split(self, day(1), day(5), day(20), val);
+        split.slice(self, day(1), day(5), day(20), val);
         bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
         bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
         
-        zcd.splitFuture(self, day(1), day(5), day(11), day(20), val);
+        split.sliceFuture(self, day(1), day(5), day(11), day(20), val);
         bytes32 class4 = keccak256(abi.encodePacked(day(1), day(5), day(11)));
         bytes32 class5 = keccak256(abi.encodePacked(day(1), day(11), day(20)));
-        assertEq(zcd.dcp(self, class1), 0);
-        assertEq(zcd.dcp(self, class2), val);
-        assertEq(zcd.dcp(self, class3), 0);
-        assertEq(zcd.dcp(self, class4), val);
-        assertEq(zcd.dcp(self, class5), val);
+        assertEq(split.dcp(self, class1), 0);
+        assertEq(split.dcp(self, class2), val);
+        assertEq(split.dcp(self, class3), 0);
+        assertEq(split.dcp(self, class4), val);
+        assertEq(split.dcp(self, class5), val);
 
-        zcd.mergeFuture(self, day(1), day(5), day(11), day(20), val);
-        assertEq(zcd.dcp(self, class3), val);
-        assertEq(zcd.dcp(self, class4), 0);
-        assertEq(zcd.dcp(self, class5), 0);
+        split.mergeFuture(self, day(1), day(5), day(11), day(20), val);
+        assertEq(split.dcp(self, class3), val);
+        assertEq(split.dcp(self, class4), 0);
+        assertEq(split.dcp(self, class5), 0);
     }
 }

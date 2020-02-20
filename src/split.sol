@@ -14,7 +14,7 @@ contract PotLike {
     function exit(uint pie) public;
 }
 
-contract ZCD {
+contract SplitDSR {
     // --- Lib ---
     function either(bool x, bool y) internal pure returns (bool z) {
         assembly{ z := or(x, y)}
@@ -62,6 +62,7 @@ contract ZCD {
     constructor(address pot_) public {
         pot = PotLike(pot_);
         vat = pot.vat();
+
         vat.hope(address(pot));
     }
 
@@ -74,9 +75,8 @@ contract ZCD {
     event BurnZCD(address usr, uint end, bytes32 class, uint dai);
     event MintDCP(address usr, uint start, uint end, bytes32 class, uint pie);
     event BurnDCP(address usr, uint start, uint end, bytes32 class, uint pie);
-    event MintFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
-    event BurnFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
-
+    event MintFutureDCP(address usr, uint start, uint slice, uint end, bytes32 class, uint pie);
+    event BurnFutureDCP(address usr, uint start, uint slice, uint end, bytes32 class, uint pie);
     event MoveZCD(address src, address dst, bytes32 class, uint dai);
     event MoveDCP(address src, address dst, bytes32 class, uint pie);
     event ChiSnapshot(uint time, uint chi);
@@ -116,20 +116,20 @@ contract ZCD {
         emit BurnDCP(usr, start, end, class, pie);
     }
 
-    function mintFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
-        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+    function mintFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, slice, end));
 
         dcp[usr][class] = add(dcp[usr][class], pie);
-        emit MintFutureDCP(usr, start, split, end, class, pie);
+        emit MintFutureDCP(usr, start, slice, end, class, pie);
     }
 
-    function burnFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
-        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+    function burnFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, slice, end));
 
         require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
 
         dcp[usr][class] = sub(dcp[usr][class], pie);
-        emit BurnFutureDCP(usr, start, split, end, class, pie);
+        emit BurnFutureDCP(usr, start, slice, end, class, pie);
     }
 
     // --- External and Public functions ---
@@ -183,7 +183,7 @@ contract ZCD {
         burnZCD(usr, end, dai);
     }
 
-    // Claims DCP coupon payments and deposits them as dai
+    // Claims coupon payments
     function claim(address usr, uint start, uint end, uint time) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
@@ -217,7 +217,7 @@ contract ZCD {
     }
 
     // Splits a DCP balance into two contiguous DCP balances(current, future)
-    function split(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
+    function slice(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3);
 
         burnDCP(usr, t1, t3, pie);
@@ -226,7 +226,7 @@ contract ZCD {
     }
 
     // Splits a future DCP balance into two contiguous future DCP balances
-    function splitFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+    function sliceFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
 
         burnFutureDCP(usr, t1, t2, t4, pie);
@@ -234,8 +234,8 @@ contract ZCD {
         mintFutureDCP(usr, t1, t3, t4, pie);
     }
 
-    // Activates a future DCP balance to make it current
-    function activate(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) {
+    // Sets start timestamp of a future DCP balance to make it current
+    function start(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
 
         require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3

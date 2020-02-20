@@ -2,20 +2,20 @@ pragma solidity ^0.5.10;
 
 import "./erc20.sol";
 
-contract ZCDLike {
+contract SplitDSRLike {
     function approvals(address, address) external returns (bool);
-    function moveZCD(address, address, uint, uint) external;
-    function moveDCP(address, address, uint, uint, uint) external;
+    function moveZCD(address, address, bytes32, uint) external;
+    function moveDCP(address, address, bytes32, uint) external;
 }
 
 contract ZCDAdapterERC20 {
-    ZCDLike zcd;
+    SplitDSRLike split;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
-    constructor(uint256 chainId_, address zcd_) public {
+    constructor(uint256 chainId_, address splitdsr_) public {
         chainId = chainId_;
-        zcd = ZCDLike(zcd_);
+        split = SplitDSRLike(splitdsr_);
     }
 
     // --- Lib ---
@@ -24,7 +24,7 @@ contract ZCDAdapterERC20 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, zcd.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
         _;
     }
 
@@ -39,25 +39,25 @@ contract ZCDAdapterERC20 {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         ERC20(tokens[class]).mint(usr, dai);
-        zcd.moveZCD(usr, address(this), end, dai);
+        split.moveZCD(usr, address(this), class, dai);
     }
 
     function exit(address usr, uint end, uint dai) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(end));
 
         ERC20(tokens[class]).burn(usr, dai);
-        zcd.moveZCD(address(this), usr, end, dai);
+        split.moveZCD(address(this), usr, class, dai);
     }
 }
 
 contract DCPAdapterERC20 {
-    ZCDLike zcd;
+    SplitDSRLike split;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
-    constructor(uint256 chainId_, address zcd_) public {
+    constructor(uint256 chainId_, address splitdsr_) public {
         chainId = chainId_;
-        zcd = ZCDLike(zcd_);
+        split = SplitDSRLike(splitdsr_);
     }
 
     // --- Lib ---
@@ -66,7 +66,7 @@ contract DCPAdapterERC20 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, zcd.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
         _;
     }
 
@@ -81,13 +81,13 @@ contract DCPAdapterERC20 {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         ERC20(tokens[class]).mint(usr, pie);
-        zcd.moveDCP(usr, address(this), start, end, pie);
+        split.moveDCP(usr, address(this), class, pie);
     }
 
     function exit(address usr, uint start, uint end, uint pie) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         ERC20(tokens[class]).burn(usr, pie);
-        zcd.moveDCP(address(this), usr, start, end, pie);
+        split.moveDCP(address(this), usr, class, pie);
     }
 }

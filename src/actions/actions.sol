@@ -23,7 +23,7 @@ contract PotLike {
     function exit(uint pie) public;
 }
 
-contract ZCDLike {
+contract SplitDSRLike {
     function pot() external returns (PotLike);
     function zcd(address, bytes32) external returns (uint);
     function dcp(address, bytes32) external returns (uint);
@@ -37,9 +37,9 @@ contract ZCDLike {
     function redeem(address, uint, uint) external;
     function claim(address, uint, uint, uint) external;
     function withdraw(address, uint, uint) external;
-    function split(address, uint, uint, uint, uint) external;
-    function splitFuture(address, uint, uint, uint, uint, uint) external;
-    function activate(address, uint, uint, uint, uint) external;
+    function slice(address, uint, uint, uint, uint) external;
+    function sliceFuture(address, uint, uint, uint, uint, uint) external;
+    function start(address, uint, uint, uint, uint) external;
     function merge(address, uint, uint, uint, uint, uint) external;
     function mergeFuture(address, uint, uint, uint, uint, uint) external;
 }
@@ -69,34 +69,34 @@ contract Common {
     }
 }
 
-contract ZCDProxyActions is Common {
+contract SplitDSRProxyActions is Common {
     // Calc and Issue
-    function calcAndIssue(address zcd_, address usr, uint end, uint dai) public {
-        ZCDLike zcd = ZCDLike(zcd_);
+    function calcAndIssue(address split_, address usr, uint end, uint dai) public {
+        SplitDSRLike split = SplitDSRLike(split_);
 
-        uint pie = rdiv(dai, zcd.pot().drip());
-        zcd.issue(usr, end, pie);
+        uint pie = rdiv(dai, split.pot().drip());
+        split.issue(usr, end, pie);
     }
 
     // Calc and Redeem
-    function calcAndRedeem(address zcd_, address usr, uint end, uint dai) public {
-        ZCDLike zcd = ZCDLike(zcd_);
+    function calcAndRedeem(address split_, address usr, uint end, uint dai) public {
+        SplitDSRLike split = SplitDSRLike(split_);
 
-        uint pie = dai / zcd.pot().drip(); // rad / ray -> wad
-        zcd.redeem(usr, end, pie);
+        uint pie = dai / split.pot().drip(); // rad / ray -> wad
+        split.redeem(usr, end, pie);
     }
 
     // Claim and Withdraw
-    function claimAndWithdraw(address zcd_, address usr, uint start, uint end, uint pie) public {
-        ZCDLike zcd = ZCDLike(zcd_);
+    function claimAndWithdraw(address split_, address usr, uint start, uint end, uint pie) public {
+        SplitDSRLike split = SplitDSRLike(split_);
 
-        zcd.claim(usr, start, end, now);
-        zcd.withdraw(usr, end, pie);
+        split.claim(usr, start, end, now);
+        split.withdraw(usr, end, pie);
     }
 
     // Generate Dai and Issue ZCD
     function generateDaiAndIssueZCD(
-        address zcd_,
+        address split_,
         address vat_,
         address jug,
         bytes32 ilk_,
@@ -104,13 +104,13 @@ contract ZCDProxyActions is Common {
         uint end,
         uint pie
     ) public {
-        ZCDLike zcd = ZCDLike(zcd_);
+        SplitDSRLike split = SplitDSRLike(split_);
         VatLike vat = VatLike(vat_);
 
         uint rate = JugLike(jug).drip(ilk_);
         int  dart = toInt(mul(pie, ONE) / rate) + 1; // additional wei to fix precision issues
         vat.frob(ilk_, usr, usr, usr, 0, dart);
-        zcd.issue(usr, end, pie);
+        split.issue(usr, end, pie);
     }
 
     // Claim and payback stability fee
