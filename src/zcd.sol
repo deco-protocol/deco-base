@@ -10,8 +10,8 @@ contract PotLike {
     function chi() external returns (uint ray);
     function rho() external returns (uint);
     function drip() public returns (uint);
-    function join(uint wad) public;
-    function exit(uint wad) public;
+    function join(uint pie) public;
+    function exit(uint pie) public;
 }
 
 contract ZCD {
@@ -70,106 +70,87 @@ contract ZCD {
     mapping (uint => uint) public chi; // time => pot.chi value [ray]
     uint public totalSupply; // total ZCD supply [rad]
 
-    event MintZCD(address usr, uint end, bytes32 class, uint rad);
-    event BurnZCD(address usr, uint end, bytes32 class, uint rad);
-    event MoveZCD(address src, address dst, uint end, bytes32 class, uint rad);
+    event MintZCD(address usr, uint end, bytes32 class, uint dai);
+    event BurnZCD(address usr, uint end, bytes32 class, uint dai);
+    event MintDCP(address usr, uint start, uint end, bytes32 class, uint pie);
+    event BurnDCP(address usr, uint start, uint end, bytes32 class, uint pie);
+    event MintFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
+    event BurnFutureDCP(address usr, uint start, uint split, uint end, bytes32 class, uint pie);
 
-    event MintDCP(address usr, uint start, uint end, bytes32 class, uint wad);
-    event BurnDCP(address usr, uint start, uint end, bytes32 class, uint wad);
-    event MoveDCP(address src, address dst, uint start, uint end, bytes32 class, uint wad);
+    event MoveZCD(address src, address dst, bytes32 class, uint dai);
+    event MoveDCP(address src, address dst, bytes32 class, uint pie);
     event ChiSnapshot(uint time, uint chi);
 
-    // --- Private functions ---
-    function mintZCD(address usr, uint end, uint rad) private {
+    // --- Internal functions ---
+    function mintZCD(address usr, uint end, uint dai) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        zcd[usr][class] = add(zcd[usr][class], rad);
-        totalSupply = add(totalSupply, rad);
-        emit MintZCD(usr, end, class, rad);
+        zcd[usr][class] = add(zcd[usr][class], dai);
+        totalSupply = add(totalSupply, dai);
+        emit MintZCD(usr, end, class, dai);
     }
 
-    function burnZCD(address usr, uint end, uint rad) private {
+    function burnZCD(address usr, uint end, uint dai) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
-        require(zcd[usr][class] >= rad, "zcd/insufficient-balance");
+        require(zcd[usr][class] >= dai, "zcd/insufficient-balance");
 
-        zcd[usr][class] = sub(zcd[usr][class], rad);
-        totalSupply = sub(totalSupply, rad);
-        emit BurnZCD(usr, end, class, rad);
+        zcd[usr][class] = sub(zcd[usr][class], dai);
+        totalSupply = sub(totalSupply, dai);
+        emit BurnZCD(usr, end, class, dai);
     }
 
-    function mintDCP(address usr, uint start, uint end, uint wad) private {
+    function mintDCP(address usr, uint start, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        dcp[usr][class] = add(dcp[usr][class], wad);
-        emit MintDCP(usr, start, end, class, wad);
+        dcp[usr][class] = add(dcp[usr][class], pie);
+        emit MintDCP(usr, start, end, class, pie);
     }
 
-    function burnDCP(address usr, uint start, uint end, uint wad) private {
+    function burnDCP(address usr, uint start, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        require(dcp[usr][class] >= wad, "dcp/insufficient-balance");
+        require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
 
-        dcp[usr][class] = sub(dcp[usr][class], wad);
-        emit BurnDCP(usr, start, end, class, wad);
+        dcp[usr][class] = sub(dcp[usr][class], pie);
+        emit BurnDCP(usr, start, end, class, pie);
+    }
+
+    function mintFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+
+        dcp[usr][class] = add(dcp[usr][class], pie);
+        emit MintFutureDCP(usr, start, split, end, class, pie);
+    }
+
+    function burnFutureDCP(address usr, uint start, uint split, uint end, uint pie) internal {
+        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+
+        require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
+
+        dcp[usr][class] = sub(dcp[usr][class], pie);
+        emit BurnFutureDCP(usr, start, split, end, class, pie);
     }
 
     // --- External and Public functions ---
     // Transfers ZCD balance of a certain class
-    function moveZCD(address src, address dst, uint end, uint rad) external approved(src) {
-        bytes32 class = keccak256(abi.encodePacked(end));
+    function moveZCD(address src, address dst, bytes32 class, uint dai) external approved(src) {
+        require(zcd[src][class] >= dai, "zcd/insufficient-balance");
 
-        require(zcd[src][class] >= rad, "zcd/insufficient-balance");
+        zcd[src][class] = sub(zcd[src][class], dai);
+        zcd[dst][class] = add(zcd[dst][class], dai);
 
-        zcd[src][class] = sub(zcd[src][class], rad);
-        zcd[dst][class] = add(zcd[dst][class], rad);
-
-        emit MoveZCD(src, dst, end, class, rad);
+        emit MoveZCD(src, dst, class, dai);
     }
 
     // Transfers DCP balance of a certain class
-    function moveDCP(address src, address dst, uint start, uint end, uint wad) external approved(src) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
+    function moveDCP(address src, address dst, bytes32 class, uint pie) external approved(src) {
+        require(dcp[src][class] >= pie, "dcp/insufficient-balance");
 
-        require(dcp[src][class] >= wad, "dcp/insufficient-balance");
+        dcp[src][class] = sub(dcp[src][class], pie);
+        dcp[dst][class] = add(dcp[dst][class], pie);
 
-        dcp[src][class] = sub(dcp[src][class], wad);
-        dcp[dst][class] = add(dcp[dst][class], wad);
-
-        emit MoveDCP(src, dst, start, end, class, wad);
-    }
-
-    // Locks dai in DSR contract to mint ZCD and DCP balance
-    function issue(address usr, uint end, uint wad) external approved(usr) {
-        require(now <= end);
-
-        uint rad = mul(wad, snapshot());
-        vat.move(usr, address(this), rad);
-        pot.join(wad);
-
-        mintZCD(usr, end, rad);
-        mintDCP(usr, now, end, wad);
-    }
-
-    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
-    function withdraw(address usr, uint end, uint wad) external approved(usr) {
-        uint rad = mul(wad, snapshot());
-        pot.exit(wad);
-        vat.move(address(this), usr, rad);
-
-        burnZCD(usr, end, rad);
-        burnDCP(usr, now, end, wad); // DCP should be fully claimed
-    }
-
-    // Redeem ZCD for dai after maturity
-    function redeem(address usr, uint end, uint wad) external approved(usr) {
-        require(now > end);
-
-        uint rad = mul(wad, snapshot());
-        pot.exit(wad);
-        vat.move(address(this), usr, rad);
-
-        burnZCD(usr, end, rad);
+        emit MoveDCP(src, dst, class, pie);
     }
 
     // Snapshots chi value at a particular time
@@ -179,55 +160,111 @@ contract ZCD {
         emit ChiSnapshot(now, chi_);
     }
 
-    // Sets DCP start to time for which a snapshot is available
-    function activate(address usr, uint start, uint end, uint time) external approved(usr) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
+    // Locks dai in DSR contract to mint ZCD and DCP balance
+    function issue(address usr, uint end, uint pie) external approved(usr) {
+        require(now <= end);
 
-        require(chi[start] == 0);
-        require(chi[time] != 0);
-        require(start <= time && time <= end);
-        require(start != time);
-        
-        uint wad = dcp[usr][class];
-        burnDCP(usr, start, end, wad);
-        mintDCP(usr, time, end, wad);
+        uint dai = mul(pie, snapshot());
+        vat.move(usr, address(this), dai);
+        pot.join(pie);
+
+        mintZCD(usr, end, dai);
+        mintDCP(usr, now, end, pie);
+    }
+
+    // Redeem ZCD for dai after maturity
+    function redeem(address usr, uint end, uint pie) external approved(usr) {
+        require(now > end);
+
+        uint dai = mul(pie, snapshot());
+        pot.exit(pie);
+        vat.move(address(this), usr, dai);
+
+        burnZCD(usr, end, dai);
     }
 
     // Claims DCP coupon payments and deposits them as dai
-    function claim(address usr, uint start, uint end, uint time) external {
+    function claim(address usr, uint start, uint end, uint time) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
-        uint wad = dcp[usr][class];
-        snapshot();
-
-        require((chi[start] != 0) && (chi[time] != 0) && (chi[time] > chi[start]));
+        uint pie = dcp[usr][class];
+        require(pie > 0);
         require((start <= time) && (time <= end));
-        require(wad > 0);
 
-        burnDCP(usr, start, end, wad);
-        mintDCP(usr, time, end, rdiv(rmul(wad, chi[start]), chi[time])); // division rounds down wad
+        uint chiNow = snapshot();
+        uint chiStart = chi[start];
+        uint chiTime = chi[time];
 
-        uint val = mul(wad, sub(chi[time], chi[start])) / chi[now]; // wad * ray / ray -> wad
+        require((chiStart != 0) && (chiTime != 0) && (chiTime > chiStart));
 
-        pot.exit(val);
-        vat.move(address(this), usr, mul(val, chi[now]));
+        burnDCP(usr, start, end, pie);
+        mintDCP(usr, time, end, rdiv(rmul(pie, chiStart), chiTime)); // division rounds down wad
+
+        uint pieOut = mul(pie, sub(chiTime, chiStart)) / chiNow; // wad * ray / ray -> wad
+
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 
-    // Splits a single DCP into two contiguous DCPs
-    function split(address usr, uint t1, uint t2, uint t3, uint wad) external approved(usr) {
-        require(t1 < t2 && t2 < t3);
+    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
+    function withdraw(address usr, uint end, uint pie) external approved(usr) {
+        uint dai = mul(pie, snapshot());
+        pot.exit(pie);
+        vat.move(address(this), usr, dai);
 
-        burnDCP(usr, t1, t3, wad);
-        mintDCP(usr, t1, t2, wad);
-        mintDCP(usr, t2, t3, wad);
+        burnZCD(usr, end, dai);
+        burnDCP(usr, now, end, pie); // DCP should be fully claimed
     }
 
-    // Merges two contiguous DCPs into a single DCP
-    function merge(address usr, uint t1, uint t2, uint t3, uint wad) external approved(usr) {
+    // Splits a DCP balance into two contiguous DCP balances(current, future)
+    function split(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3);
 
-        burnDCP(usr, t1, t2, wad);
-        burnDCP(usr, t2, t3, wad);
-        mintDCP(usr, t1, t3, wad);
+        burnDCP(usr, t1, t3, pie);
+        mintDCP(usr, t1, t2, pie);
+        mintFutureDCP(usr, t1, t2, t3, pie); // (t1 * pie) balance can be activated later from t2 to t3
+    }
+
+    // Splits a future DCP balance into two contiguous future DCP balances
+    function splitFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 < t2 && t2 < t3 && t3 < t4);
+
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintFutureDCP(usr, t1, t2, t3, pie);
+        mintFutureDCP(usr, t1, t3, t4, pie);
+    }
+
+    // Activates a future DCP balance to make it current
+    function activate(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) {
+        bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
+
+        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
+        require(chi[t1] != 0); // used to retrieve original notional amount
+        require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
+
+        uint pie = dcp[usr][class];
+        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
+
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintDCP(usr, t3, t4, newpie); // savings earnt lost from t2 to t3 when they aren't equal
+    }
+
+    // Merges two continguous DCP balances(current, future) into one DCP balance
+    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
+        uint futurePie = (t1 == t2) ? pie : mul(pie, chi[t2]) / chi[t1];
+
+        burnDCP(usr, t2, t3, pie);
+        burnFutureDCP(usr, t1, t3, t4, futurePie);
+        mintDCP(usr, t2, t4, pie);
+    }
+
+    // Merges two continguous future DCP balances into one future DCP balance
+    function mergeFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 < t2 && t2 < t3 && t3 < t4);
+
+        burnFutureDCP(usr, t1, t2, t3, pie);
+        burnFutureDCP(usr, t1, t3, t4, pie);
+        mintFutureDCP(usr, t1, t2, t4, pie);
     }
 }
