@@ -18,7 +18,6 @@ contract ZCDAdapterERC20 {
         split = SplitDSRLike(splitdsr_);
     }
 
-    // --- Lib ---
     function either(bool x, bool y) internal pure returns (bool z) {
         assembly{ z := or(x, y)}
     }
@@ -28,15 +27,19 @@ contract ZCDAdapterERC20 {
         _;
     }
 
-    function deployToken(uint end) public {
+    function deployToken(uint end) public returns (address) {
         bytes32 class = keccak256(abi.encodePacked(end));
+        require(address(tokens[class]) == address(0), "zcd/token-exists");
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("ZCD ", class)), "ZCD", "1", 45);
         tokens[class] = address(token);
+
+        return address(token);
     }
 
     function join(address usr, uint end, uint dai) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(end));
+        require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
         ERC20(tokens[class]).mint(usr, dai);
         split.moveZCD(usr, address(this), class, dai);
@@ -44,6 +47,7 @@ contract ZCDAdapterERC20 {
 
     function exit(address usr, uint end, uint dai) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(end));
+        require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
         ERC20(tokens[class]).burn(usr, dai);
         split.moveZCD(address(this), usr, class, dai);
@@ -60,7 +64,6 @@ contract DCPAdapterERC20 {
         split = SplitDSRLike(splitdsr_);
     }
 
-    // --- Lib ---
     function either(bool x, bool y) internal pure returns (bool z) {
         assembly{ z := or(x, y)}
     }
@@ -70,15 +73,19 @@ contract DCPAdapterERC20 {
         _;
     }
 
-    function deployToken(uint start, uint end) public {
+    function deployToken(uint start, uint end) public returns (address) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
+        require(address(tokens[class]) == address(0), "dcp/token-exists");
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("DCP ", class)), "DCP", "1", 18);
         tokens[class] = address(token);
+
+        return address(token);
     }
 
     function join(address usr, uint start, uint end, uint pie) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
+        require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
         ERC20(tokens[class]).mint(usr, pie);
         split.moveDCP(usr, address(this), class, pie);
@@ -86,6 +93,7 @@ contract DCPAdapterERC20 {
 
     function exit(address usr, uint start, uint end, uint pie) external approved(usr) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
+        require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
         ERC20(tokens[class]).burn(usr, pie);
         split.moveDCP(address(this), usr, class, pie);
