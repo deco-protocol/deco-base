@@ -44,6 +44,18 @@ contract SplitDSRLike {
     function mergeFuture(address, uint, uint, uint, uint, uint) external;
 }
 
+contract DaiLike {
+    function approve(address, uint) public;
+    function transferFrom(address, address, uint) public;
+}
+
+contract DaiJoinLike {
+    function vat() public returns (VatLike);
+    function dai() public returns (DaiLike);
+    function join(address, uint) public payable;
+    function exit(address, uint) public;
+}
+
 contract Common {
     uint256 constant ONE = 10 ** 27;
 
@@ -65,25 +77,48 @@ contract Common {
     }
 
     function toRad(uint wad) internal pure returns (uint rad) {
-        rad = mul(wad, 10 ** 27);
+        rad = mul(wad, ONE);
+    }
+
+    function toWad(uint rad) internal pure returns (uint wad) {
+        wad = rad / ONE;
+
+        // If the rad precision has some dust, it will need to request for 1 extra wad wei
+        wad = mul(wad, ONE) < rad ? wad + 1 : wad;
+    }
+
+    // Inspiration from https://github.com/makerdao/dss-proxy-actions/blob/master/src/DssProxyActions.sol
+    function daiJoin_join(address apt, address urn, uint wad) public {
+        // Gets DAI from the user's wallet
+        DaiJoinLike(apt).dai().transferFrom(msg.sender, address(this), wad);
+        // Approves adapter to take the DAI amount
+        DaiJoinLike(apt).dai().approve(apt, wad);
+        // Joins DAI into the vat
+        DaiJoinLike(apt).join(urn, wad);
     }
 }
 
 contract SplitDSRProxyActions is Common {
     // Calc and Issue
-    function calcAndIssue(address split_, address usr, uint end, uint dai) public {
+    function calcAndIssue(address split_, address daiJoin_, address usr, uint end, uint wad) public {
         SplitDSRLike split = SplitDSRLike(split_);
+
+        daiJoin_join(daiJoin_, usr, wad);
+        uint dai = toRad(wad);
 
         uint pie = rdiv(dai, split.pot().drip());
         split.issue(usr, end, pie);
     }
 
     // Calc and Redeem
-    function calcAndRedeem(address split_, address usr, uint end, uint dai) public {
+    function calcAndRedeem(address split_, address daiJoin_, address usr, uint end, uint dai) public {
         SplitDSRLike split = SplitDSRLike(split_);
 
         uint pie = dai / split.pot().drip(); // rad / ray -> wad
         split.redeem(usr, end, pie);
+
+        uint wad = toWad(dai);
+        DaiJoinLike(daiJoin_).exit(usr, wad);
     }
 
     // Claim and Withdraw
