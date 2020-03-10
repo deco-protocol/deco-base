@@ -6,6 +6,7 @@ import {DaiJoin} from "dss/join.sol";
 import {Vat} from "dss/vat.sol";
 import {Pot} from "dss/pot.sol";
 import "../split.sol";
+import {ValueDSR} from "../value.sol";
 
 contract Hevm {
     function warp(uint256) public;
@@ -13,9 +14,11 @@ contract Hevm {
 
 contract User {
     SplitDSR split;
+    ValueDSR value;
 
-    constructor(SplitDSR split_) public {
+    constructor(SplitDSR split_, ValueDSR value_) public {
         split = split_;
+        value = value_;
     }
 }
 
@@ -28,6 +31,7 @@ contract SplitDSRTest is DSTest {
     DaiJoin adapter;
 
     SplitDSR split;
+    ValueDSR value;
 
     address vow;
     address self;
@@ -81,7 +85,9 @@ contract SplitDSRTest is DSTest {
         dai.rely(address(adapter));        
         pot.file("vow", vow);
 
-        split = new SplitDSR(address(pot));
+        value = new ValueDSR();
+        split = new SplitDSR(address(pot), address(value));
+        value.init(address(split));
 
         vat.hope(address(pot));
         vat.hope(address(adapter));

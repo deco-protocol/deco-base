@@ -9,9 +9,17 @@ contract PotLike {
     function vat() public returns (VatLike);
     function chi() external returns (uint ray);
     function rho() external returns (uint);
+    function live() public returns (uint);
     function drip() public returns (uint);
     function join(uint pie) public;
     function exit(uint pie) public;
+}
+
+contract ValueDSRLike {
+    function split() public returns (address);
+    function initialized() public returns (bool);
+    function zcd(uint,uint) public returns (uint);
+    function dcp(uint,uint) public returns (uint);
 }
 
 contract SplitDSR {
@@ -56,13 +64,19 @@ contract SplitDSR {
         _;
     }
 
-    VatLike  public vat;
+    VatLike public vat;
     PotLike public pot;
 
-    constructor(address pot_) public {
+    ValueDSRLike public value;
+
+    uint public last; // emergency shutdown timestamp
+
+    constructor(address pot_, address value_) public {
         pot = PotLike(pot_);
         vat = pot.vat();
+        value = ValueDSRLike(value_);
 
+        last = uint(-1);
         vat.hope(address(pot));
     }
 
@@ -80,6 +94,17 @@ contract SplitDSR {
     event MoveZCD(address src, address dst, bytes32 class, uint dai);
     event MoveDCP(address src, address dst, bytes32 class, uint pie);
     event ChiSnapshot(uint time, uint chi);
+
+    // --- Emergency Shutdown Modifiers ---
+    modifier untilLast(uint time) {
+        require(time <= last); // timestamp before or at emergency shutdown
+        _;
+    }
+
+    modifier afterLast(uint time) {
+        require(last < time); // time greater than emergency shutdown timestamp
+        _;
+    }
 
     // --- Internal functions ---
     function mintZCD(address usr, uint end, uint dai) internal {
@@ -161,7 +186,7 @@ contract SplitDSR {
     }
 
     // Locks dai in DSR contract to mint ZCD and DCP balance
-    function issue(address usr, uint end, uint pie) external approved(usr) {
+    function issue(address usr, uint end, uint pie) external approved(usr) untilLast(now) {
         require(now <= end);
 
         uint dai = mul(pie, snapshot());
@@ -173,7 +198,7 @@ contract SplitDSR {
     }
 
     // Redeem ZCD for dai after maturity
-    function redeem(address usr, uint end, uint pie) external approved(usr) {
+    function redeem(address usr, uint end, uint pie) external approved(usr) untilLast(end) {
         require(now > end);
 
         uint dai = mul(pie, snapshot());
@@ -184,11 +209,11 @@ contract SplitDSR {
     }
 
     // Claims coupon payments
-    function claim(address usr, uint start, uint end, uint time) external approved(usr) {
+    function claim(address usr, uint start, uint end, uint time) external approved(usr) untilLast(time) {
         bytes32 class = keccak256(abi.encodePacked(start, end));
-
         uint pie = dcp[usr][class];
         require(pie > 0);
+
         require((start <= time) && (time <= end));
 
         uint chiNow = snapshot();
@@ -207,7 +232,7 @@ contract SplitDSR {
     }
 
     // Merge equal amounts of ZCD and DCP of same class to withdraw dai
-    function withdraw(address usr, uint end, uint pie) external approved(usr) {
+    function withdraw(address usr, uint end, uint pie) external approved(usr) untilLast(now) {
         uint dai = mul(pie, snapshot());
         pot.exit(pie);
         vat.move(address(this), usr, dai);
@@ -225,30 +250,6 @@ contract SplitDSR {
         mintFutureDCP(usr, t1, t2, t3, pie); // (t1 * pie) balance can be activated later from t2 to t3
     }
 
-    // Splits a future DCP balance into two contiguous future DCP balances
-    function sliceFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
-        require(t1 < t2 && t2 < t3 && t3 < t4);
-
-        burnFutureDCP(usr, t1, t2, t4, pie);
-        mintFutureDCP(usr, t1, t2, t3, pie);
-        mintFutureDCP(usr, t1, t3, t4, pie);
-    }
-
-    // Sets start timestamp of a future DCP balance to make it current
-    function start(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) {
-        bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
-
-        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
-        require(chi[t1] != 0); // used to retrieve original notional amount
-        require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
-
-        uint pie = dcp[usr][class];
-        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
-
-        burnFutureDCP(usr, t1, t2, t4, pie);
-        mintDCP(usr, t3, t4, newpie); // savings earnt lost from t2 to t3 when they aren't equal
-    }
-
     // Merges two continguous DCP balances(current, future) into one DCP balance
     function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
@@ -259,6 +260,15 @@ contract SplitDSR {
         mintDCP(usr, t2, t4, pie);
     }
 
+    // Splits a future DCP balance into two contiguous future DCP balances
+    function sliceFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
+        require(t1 < t2 && t2 < t3 && t3 < t4);
+
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintFutureDCP(usr, t1, t2, t3, pie);
+        mintFutureDCP(usr, t1, t3, t4, pie);
+    }
+
     // Merges two continguous future DCP balances into one future DCP balance
     function mergeFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
@@ -266,5 +276,82 @@ contract SplitDSR {
         burnFutureDCP(usr, t1, t2, t3, pie);
         burnFutureDCP(usr, t1, t3, t4, pie);
         mintFutureDCP(usr, t1, t2, t4, pie);
+    }
+
+    // Sets start timestamp of a future DCP balance to make it current
+    function start(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) untilLast(t3) {
+        bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
+
+        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
+
+        require(chi[t1] != 0); // used to retrieve original notional amount
+        require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
+
+        uint pie = dcp[usr][class];
+        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
+
+        burnFutureDCP(usr, t1, t2, t4, pie);
+        mintDCP(usr, t3, t4, newpie); // savings earnt lost from t2 to t3 when they aren't equal
+    }
+
+    // Set last timestamp if Pot is under emergency shutdown
+    function cage() external {
+        require(pot.live() == 0); // Pot needs to be caged
+        require(last == uint(-1)); // last shouldn't be set
+        require(value.split() == address(this)); // SplitDSR address set in ValueDSR matches
+
+        snapshot(); // snapshot is taken for claims processing until last
+        last = now; // last timestamp set to now
+    }
+
+    // Before cashing zcd and dcp,
+    // * execute value.update() once to set value.last
+    // * execute value.calculate() for each end timestamp where zcd or dcp needs cashing out
+
+    // Cash out ZCD redeemable after emergency shutdown
+    function cashZCD(address usr, uint end) external afterLast(end) {
+        bytes32 class = keccak256(abi.encodePacked(end));
+
+        uint dai = zcd[usr][class]; // retrieve total zcd balance [rad]
+        burnZCD(usr, end, dai); // burn zcd balance
+
+        uint cash = value.zcd(end, dai); // get value of zcd balance in dai
+
+        uint chiNow = pot.drip(); // drip pot and retreive current chi
+        uint pieOut = cash / chiNow;
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
+    }
+
+    // Cash out DCP with valid claim on savings after emergency shutdown
+    function cashDCP(address usr, uint end) external afterLast(end) {
+        bytes32 class = keccak256(abi.encodePacked(last, end));
+
+        uint pie = dcp[usr][class]; // retrieve total dcp balance [wad]
+        burnDCP(usr, last, end, pie); // burn dcp balance
+
+        uint dai = mul(pie, chi[last]);
+        uint cash = value.dcp(end, dai); // get value of dcp balance in dai
+
+        uint chiNow = pot.drip();
+        uint pieOut = cash / chiNow;
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
+    }
+
+    // Cash out Future DCP with valid claim on savings after emergency shutdown
+    function cashFutureDCP(address usr, uint start, uint split, uint end) external afterLast(split) {
+        bytes32 class = keccak256(abi.encodePacked(start, split, end));
+
+        uint pie = dcp[usr][class]; // retrieve total dcp balance [wad]
+        burnFutureDCP(usr, start, split, end, pie); // burn future dcp balance
+
+        uint dai = mul(pie, chi[start]);
+        uint cash = sub(value.dcp(end, dai), value.dcp(split, dai));
+
+        uint chiNow = pot.drip();
+        uint pieOut = cash / chiNow;
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 }

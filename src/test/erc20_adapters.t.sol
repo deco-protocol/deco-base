@@ -6,6 +6,7 @@ import {DaiJoin} from "dss/join.sol";
 import {Vat} from "dss/vat.sol";
 import {Pot} from "dss/pot.sol";
 import "../split.sol";
+import {ValueDSR} from "../value.sol";
 import "../adapters/erc20.sol";
 import "../adapters/erc20_adapters.sol";
 
@@ -15,11 +16,13 @@ contract Hevm {
 
 contract User {
     SplitDSR split;
+    ValueDSR value;
     ZCDAdapterERC20 zcdToken;
     DCPAdapterERC20 dcpToken;
 
-    constructor(SplitDSR splitdsr_) public {
-        split = splitdsr_;
+    constructor(SplitDSR split_, ValueDSR value_) public {
+        split = split_;
+        value = value_;
     }
 }
 
@@ -34,6 +37,7 @@ contract ERC20AdapterTest is DSTest {
     DCPAdapterERC20 dcpAdapter;
 
     SplitDSR split;
+    ValueDSR value;
 
     address vow;
     address self;
@@ -87,7 +91,9 @@ contract ERC20AdapterTest is DSTest {
         dai.rely(address(adapter));
         pot.file("vow", vow);
 
-        split = new SplitDSR(address(pot));
+        value = new ValueDSR();
+        split = new SplitDSR(address(pot), address(value));
+        value.init(address(split));
 
         vat.hope(address(pot));
         vat.hope(address(adapter));
