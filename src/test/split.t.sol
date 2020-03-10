@@ -149,7 +149,7 @@ contract SplitDSRTest is DSTest {
         assertEq(split.dcp(self, dcpClass), val);
     }
 
-    function test_slice_start_claim_dcp() public {
+    function test_slice_convert_claim_dcp() public {
         uint chi_1 = pot.drip();
         uint val = rdiv(10 ether, chi_1);
 
@@ -171,7 +171,7 @@ contract SplitDSRTest is DSTest {
         hevm.warp(day(6));
         uint chi_6 = split.snapshot();
         uint val_6 = (mul(val, chi_1) / chi_6);
-        split.start(self, day(1), day(5), day(6), day(20));
+        split.convert(self, day(1), day(5), day(6), day(20));
         bytes32 class4 = keccak256(abi.encodePacked(day(6), day(20)));
         assertEq(split.dcp(self, class4), val_6);
 

@@ -23,8 +23,18 @@ contract PotLike {
     function exit(uint pie) public;
 }
 
+contract ValueDSRLike {
+    function split() public returns (address);
+    function initialized() public returns (bool);
+    function zcd(uint,uint) public returns (uint);
+    function dcp(uint,uint) public returns (uint);
+}
+
 contract SplitDSRLike {
-    function pot() external returns (PotLike);
+    function vat() public returns (VatLike);
+    function pot() public returns (PotLike);
+    function value() public returns (ValueDSRLike);
+    function last() public returns (uint);
     function zcd(address, bytes32) external returns (uint);
     function dcp(address, bytes32) external returns (uint);
     function chi(uint, uint) external returns (uint);
@@ -38,10 +48,14 @@ contract SplitDSRLike {
     function claim(address, uint, uint, uint) external;
     function withdraw(address, uint, uint) external;
     function slice(address, uint, uint, uint, uint) external;
-    function sliceFuture(address, uint, uint, uint, uint, uint) external;
-    function start(address, uint, uint, uint, uint) external;
     function merge(address, uint, uint, uint, uint, uint) external;
+    function sliceFuture(address, uint, uint, uint, uint, uint) external;
     function mergeFuture(address, uint, uint, uint, uint, uint) external;
+    function convert(address, uint, uint, uint, uint) external;
+    function cage() external;
+    function cashZCD(address, uint) external;
+    function cashDCP(address, uint) external;
+    function cashFutureDCP(address, uint, uint, uint) external;
 }
 
 contract DaiLike {

@@ -278,8 +278,8 @@ contract SplitDSR {
         mintFutureDCP(usr, t1, t2, t4, pie);
     }
 
-    // Sets start timestamp of a future DCP balance to make it current
-    function start(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) untilLast(t3) {
+    // Converts future DCP balance to current DCP balance
+    function convert(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) untilLast(t3) {
         bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
 
         require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
