@@ -85,14 +85,14 @@ contract SplitDSR {
     mapping (uint => uint) public chi; // time => pot.chi value [ray]
     uint public totalSupply; // total ZCD supply [rad]
 
-    event MintZCD(address usr, uint end, bytes32 class, uint dai);
-    event BurnZCD(address usr, uint end, bytes32 class, uint dai);
-    event MintDCP(address usr, uint start, uint end, bytes32 class, uint pie);
-    event BurnDCP(address usr, uint start, uint end, bytes32 class, uint pie);
-    event MintFutureDCP(address usr, uint start, uint slice, uint end, bytes32 class, uint pie);
-    event BurnFutureDCP(address usr, uint start, uint slice, uint end, bytes32 class, uint pie);
-    event MoveZCD(address src, address dst, bytes32 class, uint dai);
-    event MoveDCP(address src, address dst, bytes32 class, uint pie);
+    event MintZCD(address indexed usr, bytes32 indexed class, uint end, uint dai);
+    event BurnZCD(address indexed usr, bytes32 indexed class, uint end, uint dai);
+    event MintDCP(address indexed usr, bytes32 indexed class, uint start, uint end, uint pie);
+    event BurnDCP(address indexed usr, bytes32 indexed class, uint start, uint end, uint pie);
+    event MintFutureDCP(address indexed usr, bytes32 indexed class, uint start, uint slice, uint end, uint pie);
+    event BurnFutureDCP(address indexed usr, bytes32 indexed class, uint start, uint slice, uint end, uint pie);
+    event MoveZCD(address indexed src, address indexed dst, bytes32 indexed class, uint dai);
+    event MoveDCP(address indexed src, address indexed dst, bytes32 indexed class, uint pie);
     event ChiSnapshot(uint time, uint chi);
 
     // --- Emergency Shutdown Modifiers ---
@@ -112,7 +112,7 @@ contract SplitDSR {
 
         zcd[usr][class] = add(zcd[usr][class], dai);
         totalSupply = add(totalSupply, dai);
-        emit MintZCD(usr, end, class, dai);
+        emit MintZCD(usr, class, end, dai);
     }
 
     function burnZCD(address usr, uint end, uint dai) internal {
@@ -122,14 +122,14 @@ contract SplitDSR {
 
         zcd[usr][class] = sub(zcd[usr][class], dai);
         totalSupply = sub(totalSupply, dai);
-        emit BurnZCD(usr, end, class, dai);
+        emit BurnZCD(usr, class, end, dai);
     }
 
     function mintDCP(address usr, uint start, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
         dcp[usr][class] = add(dcp[usr][class], pie);
-        emit MintDCP(usr, start, end, class, pie);
+        emit MintDCP(usr, class, start, end, pie);
     }
 
     function burnDCP(address usr, uint start, uint end, uint pie) internal {
@@ -138,14 +138,14 @@ contract SplitDSR {
         require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
 
         dcp[usr][class] = sub(dcp[usr][class], pie);
-        emit BurnDCP(usr, start, end, class, pie);
+        emit BurnDCP(usr, class, start, end, pie);
     }
 
     function mintFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, slice, end));
 
         dcp[usr][class] = add(dcp[usr][class], pie);
-        emit MintFutureDCP(usr, start, slice, end, class, pie);
+        emit MintFutureDCP(usr, class, start, slice, end, pie);
     }
 
     function burnFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
@@ -154,7 +154,7 @@ contract SplitDSR {
         require(dcp[usr][class] >= pie, "dcp/insufficient-balance");
 
         dcp[usr][class] = sub(dcp[usr][class], pie);
-        emit BurnFutureDCP(usr, start, slice, end, class, pie);
+        emit BurnFutureDCP(usr, class, start, slice, end, pie);
     }
 
     // --- External and Public functions ---

@@ -13,6 +13,8 @@ contract ZCDAdapterERC20 {
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
+    event NewZCDToken(bytes32 indexed class, address token);
+
     constructor(uint256 chainId_, address splitdsr_) public {
         chainId = chainId_;
         split = SplitDSRLike(splitdsr_);
@@ -33,6 +35,8 @@ contract ZCDAdapterERC20 {
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("ZCD ", class)), "ZCD", "1", 45);
         tokens[class] = address(token);
+
+        emit NewZCDToken(class, address(token));
 
         return address(token);
     }
@@ -59,6 +63,8 @@ contract DCPAdapterERC20 {
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
+    event NewDCPToken(bytes32 indexed class, address token);
+
     constructor(uint256 chainId_, address splitdsr_) public {
         chainId = chainId_;
         split = SplitDSRLike(splitdsr_);
@@ -79,6 +85,8 @@ contract DCPAdapterERC20 {
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("DCP ", class)), "DCP", "1", 18);
         tokens[class] = address(token);
+
+        emit NewDCPToken(class, address(token));
 
         return address(token);
     }
