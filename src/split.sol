@@ -231,6 +231,29 @@ contract SplitDSR {
         vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 
+    // Pay dai to rewind the start timestamp of a dcp balance back to time timestamp
+    function rewind(address usr, uint start, uint end, uint time, uint pie) external approved(usr) untilLast(now) {
+        require((time <= start) && (start <= end));
+
+        uint chiNow = snapshot();
+        uint chiTime = chi[time];
+        uint chiStart = chi[start];
+
+        require((chiTime != 0) && (chiStart != 0) && (chiTime < chiStart));
+
+        uint notional = mul(pie, chiStart); // wad * ray -> rad
+        uint pieTime = notional / chiTime; // rad / ray -> wad
+        uint total = mul(pieTime, chiStart); // wad * ray -> rad // total at start for notional deposited at time
+
+        burnDCP(usr, start, end, pie);
+        mintDCP(usr, time, end, pieTime);
+
+        uint pieIn = sub(total, notional) / chiNow; // (rad - rad) / ray -> wad
+
+        vat.move(usr, address(this), mul(pieIn, chiNow));
+        pot.join(pieIn);
+    }
+
     // Merge equal amounts of ZCD and DCP of same class to withdraw dai
     function withdraw(address usr, uint end, uint pie) external approved(usr) untilLast(now) {
         uint dai = mul(pie, snapshot());

@@ -46,6 +46,7 @@ contract SplitDSRLike {
     function issue(address, uint, uint) external;
     function redeem(address, uint, uint) external;
     function claim(address, uint, uint, uint) external;
+    function rewind(address, uint, uint, uint, uint) external;
     function withdraw(address, uint, uint) external;
     function slice(address, uint, uint, uint, uint) external;
     function merge(address, uint, uint, uint, uint, uint) external;

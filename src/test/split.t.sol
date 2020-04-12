@@ -134,6 +134,26 @@ contract SplitDSRTest is DSTest {
         assertEq(wad(vat.dai(self)), wad(mul(val, pot.drip())) + 90 ether - 2 wei);
     }
 
+    function test_rewind_claim_dcp() public {
+        uint val = rdiv(10 ether, pot.drip());
+
+        split.snapshot(); // day 1 snapshot
+
+        hevm.warp(day(3));
+        split.issue(self, day(5), val);
+
+        bytes32 zcdClass = keccak256(abi.encodePacked(day(5)));
+        bytes32 dcpClass1 = keccak256(abi.encodePacked(day(3), day(5)));
+        bytes32 dcpClass2 = keccak256(abi.encodePacked(day(1), day(5)));
+
+        uint daibalance = wad(vat.dai(self)); //balance: 89999988705974138589
+
+        split.rewind(self, day(3), day(5), day(1), val); //balance: 89999977411935521676
+        split.claim(self, day(1), day(5), now); //balance: 89999988705974138589
+
+        assertEq(wad(vat.dai(self)), daibalance);
+    }
+
     function test_redeem_zcd() public {
         uint val = rdiv(10 ether, pot.drip());
 
