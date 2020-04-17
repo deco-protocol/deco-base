@@ -198,14 +198,18 @@ contract SplitDSR {
     }
 
     // Redeem ZCD for dai after maturity
-    function redeem(address usr, uint end, uint pie) external approved(usr) untilLast(end) {
-        require(now > end);
+    function redeem(address usr, uint end, uint time, uint dai) external approved(usr) untilLast(end) {
+        require((end <= time) && (time <= now));
 
-        uint dai = mul(pie, snapshot());
-        pot.exit(pie);
-        vat.move(address(this), usr, dai);
+        uint chiTime = chi[time];
+        uint chiNow = snapshot();
+        require(chiTime != 0);
 
         burnZCD(usr, end, dai);
+
+        uint pie = dai / chiTime; // calculate pie with earlier time of deposit // rad / ray -> wad 
+        pot.exit(pie); // payout pie at current chi value
+        vat.move(address(this), usr, mul(pie, chiNow)); // dai paid out with savings earnt after maturity
     }
 
     // Claims coupon payments

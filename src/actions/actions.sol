@@ -44,7 +44,7 @@ contract SplitDSRLike {
     function moveDCP(address, address, bytes32, uint) external;
     function snapshot() public returns (uint);
     function issue(address, uint, uint) external;
-    function redeem(address, uint, uint) external;
+    function redeem(address, uint, uint, uint) external;
     function claim(address, uint, uint, uint) external;
     function rewind(address, uint, uint, uint, uint) external;
     function withdraw(address, uint, uint) external;
@@ -148,21 +148,17 @@ contract SplitDSRProxyActions is Common {
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP using Vat.dai balance
     }
 
-    // Calculate Pie value and Redeem ZCD to Vat.dai balance of usr
-    function calcAndRedeemToVat(address split_, address usr, uint end, uint wad) public {
-        uint pie = rdiv(wad, SplitDSRLike(split_).snapshot());  // Calculate Pie
-        SplitDSRLike(split_).redeem(usr, end, pie); // Redeem ZCD after maturity to Vat.dai balance
-    }
+    // Redeem already takes wad instead of pie as input
 
     // Calculate Pie value and Redeem ZCD to ERC20 Dai balance of usr
-    function calcAndRedeemToERC20(address split_, address daiJoin_, address usr, uint end, uint wad) public {
-        calcAndRedeemToVat(split_, usr, end, wad); // Redeem ZCD after maturity to Vat.dai balance
+    function calcAndRedeemToERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint wad) public {
+        SplitDSRLike(split_).redeem(usr, end, time, wad); // Redeem ZCD after maturity to Vat.dai balance
         moveAllVatDaiToERC20(daiJoin_, usr); // Move entire Vat.dai balance to Dai ERC20 token
     }
 
     // Calculate Pie value and Redeem ZCD to DSR pie balance of DSProxy
-    function calcAndRedeemToDSR(address split_, address pot_, address usr, uint end, uint wad) public {
-        calcAndRedeemToVat(split_, usr, end, wad); // Redeem ZCD after maturity to Vat.dai balance
+    function calcAndRedeemToDSR(address split_, address pot_, address usr, uint end, uint time, uint wad) public {
+        SplitDSRLike(split_).redeem(usr, end, time, wad); // Redeem ZCD after maturity to Vat.dai balance
         moveAllVatDaiToDSR(pot_, usr); // Move all Vat.dai balance to DSProxy's Pot balance
     }
 

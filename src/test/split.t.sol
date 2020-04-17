@@ -162,8 +162,11 @@ contract SplitDSRTest is DSTest {
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
         bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
 
+        hevm.warp(day(3));
+        split.snapshot();
+
         hevm.warp(day(4));
-        split.redeem(self, day(2), split.zcd(self, zcdClass) / pot.drip());
+        split.redeem(self, day(2), day(3), split.zcd(self, zcdClass));
 
         assertEq(wad(split.zcd(self, zcdClass)), 0);
         assertEq(split.dcp(self, dcpClass), val);
