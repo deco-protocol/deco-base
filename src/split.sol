@@ -213,11 +213,7 @@ contract SplitDSR {
     }
 
     // Claims coupon payments
-    function claim(address usr, uint start, uint end, uint time) external approved(usr) untilLast(time) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
-        uint pie = dcp[usr][class];
-        require(pie > 0);
-
+    function claim(address usr, uint start, uint end, uint time, uint pie) external approved(usr) untilLast(time) {
         require((start <= time) && (time <= end));
 
         uint chiNow = snapshot();
@@ -306,15 +302,12 @@ contract SplitDSR {
     }
 
     // Converts future DCP balance to current DCP balance
-    function convert(address usr, uint t1, uint t2, uint t3, uint t4) external approved(usr) untilLast(t3) {
-        bytes32 class = keccak256(abi.encodePacked(t1, t2, t4)); // new class will be t3, t4
-
+    function convert(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) untilLast(t3) {
         require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
 
         require(chi[t1] != 0); // used to retrieve original notional amount
         require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
 
-        uint pie = dcp[usr][class];
         uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
 
         burnFutureDCP(usr, t1, t2, t4, pie);
@@ -336,10 +329,7 @@ contract SplitDSR {
     // * execute value.calculate() for each end timestamp where zcd or dcp needs cashing out
 
     // Cash out ZCD redeemable after emergency shutdown
-    function cashZCD(address usr, uint end) external afterLast(end) {
-        bytes32 class = keccak256(abi.encodePacked(end));
-
-        uint dai = zcd[usr][class]; // retrieve total zcd balance [rad]
+    function cashZCD(address usr, uint end, uint dai) external afterLast(end) {
         burnZCD(usr, end, dai); // burn zcd balance
 
         uint cash = value.zcd(end, dai); // get value of zcd balance in dai
@@ -351,10 +341,7 @@ contract SplitDSR {
     }
 
     // Cash out DCP with valid claim on savings after emergency shutdown
-    function cashDCP(address usr, uint end) external afterLast(end) {
-        bytes32 class = keccak256(abi.encodePacked(last, end));
-
-        uint pie = dcp[usr][class]; // retrieve total dcp balance [wad]
+    function cashDCP(address usr, uint end, uint pie) external afterLast(end) {
         burnDCP(usr, last, end, pie); // burn dcp balance
 
         uint dai = mul(pie, chi[last]);
@@ -367,10 +354,7 @@ contract SplitDSR {
     }
 
     // Cash out Future DCP with valid claim on savings after emergency shutdown
-    function cashFutureDCP(address usr, uint start, uint split, uint end) external afterLast(split) {
-        bytes32 class = keccak256(abi.encodePacked(start, split, end));
-
-        uint pie = dcp[usr][class]; // retrieve total dcp balance [wad]
+    function cashFutureDCP(address usr, uint start, uint split, uint end, uint pie) external afterLast(split) {
         burnFutureDCP(usr, start, split, end, pie); // burn future dcp balance
 
         uint dai = mul(pie, chi[start]);

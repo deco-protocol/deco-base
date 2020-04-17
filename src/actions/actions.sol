@@ -45,18 +45,18 @@ contract SplitDSRLike {
     function snapshot() public returns (uint);
     function issue(address, uint, uint) external;
     function redeem(address, uint, uint, uint) external;
-    function claim(address, uint, uint, uint) external;
+    function claim(address, uint, uint, uint, uint) external;
     function rewind(address, uint, uint, uint, uint) external;
     function withdraw(address, uint, uint) external;
     function slice(address, uint, uint, uint, uint) external;
     function merge(address, uint, uint, uint, uint, uint) external;
     function sliceFuture(address, uint, uint, uint, uint, uint) external;
     function mergeFuture(address, uint, uint, uint, uint, uint) external;
-    function convert(address, uint, uint, uint, uint) external;
+    function convert(address, uint, uint, uint, uint, uint) external;
     function cage() external;
-    function cashZCD(address, uint) external;
-    function cashDCP(address, uint) external;
-    function cashFutureDCP(address, uint, uint, uint) external;
+    function cashZCD(address, uint, uint) external;
+    function cashDCP(address, uint, uint) external;
+    function cashFutureDCP(address, uint, uint, uint, uint) external;
 }
 
 contract DaiLike {
@@ -163,40 +163,42 @@ contract SplitDSRProxyActions is Common {
     }
 
     // Claim DCP savings accrued until now and before expiry to Vat.dai balance
-    function claimNowToVat(address split_, address usr, uint start, uint end) public {
-        SplitDSRLike(split_).claim(usr, start, end, now); // Execute claim at time now. Snapshot for now need not exist and will be captured internally
+    function claimNowToVat(address split_, address usr, uint start, uint end, uint pie) public {
+        SplitDSRLike(split_).claim(usr, start, end, now, pie); // Execute claim at time now. Snapshot for now need not exist and will be captured internally
     }
 
     // Claim DCP savings accrued until now and before expiry to ERC20 Dai balance
-    function claimNowToERC20(address split_, address daiJoin_, address usr, uint start, uint end) public {
-        claimNowToVat(split_, usr, start, end);
+    function claimNowToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint pie) public {
+        claimNowToVat(split_, usr, start, end, pie);
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
     // Claim DCP savings accrued until now and before expiry to DSR Pie balance of DSProxy contract
-    function claimNowToDSR(address split_, address pot_, address usr, uint start, uint end) public {
-        claimNowToVat(split_, usr, start, end);
+    function claimNowToDSR(address split_, address pot_, address usr, uint start, uint end, uint pie) public {
+        claimNowToVat(split_, usr, start, end, pie);
         moveAllVatDaiToDSR(pot_, usr);
     }
 
     // Claim DCP savings at Time to Vat.dai balance is the default for claim() in split.sol
 
     // Claim DCP savings at Snapshot time to ERC20 Dai balance
-    function claimAtTimeToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint time) public {
-        SplitDSRLike(split_).claim(usr, start, end, time); // Snapshot at time needs to exist
+    function claimAtTimeToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint time, uint pie) public {
+        SplitDSRLike(split_).claim(usr, start, end, time, pie); // Snapshot at time needs to exist
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
     // Claim DCP savings at Snapshot time to DSR Pie balance of DSProxy contract
-    function claimAtTimeToDSR(address split_, address pot_, address usr, uint start, uint end, uint time) public {
-        SplitDSRLike(split_).claim(usr, start, end, time);
+    function claimAtTimeToDSR(address split_, address pot_, address usr, uint start, uint end, uint time, uint pie) public {
+        SplitDSRLike(split_).claim(usr, start, end, time, pie);
         moveAllVatDaiToDSR(pot_, usr);
     }
 
     // Claim DCP savings accrued and Withdraw Dai using Pie value as input
     function claimAndWithdraw(address split_, address usr, uint start, uint end, uint pie) public {
-        SplitDSRLike(split_).claim(usr, start, end, now); // Withdraw cannot be executed until all savings are claimed until now
-        SplitDSRLike(split_).withdraw(usr, end, pie); // Merge ZCD and DCP before expiry to withdraw dai
+        SplitDSRLike(split_).claim(usr, start, end, now, pie); // Withdraw cannot be executed until all savings are claimed until now
+        bytes32 class = keccak256(abi.encodePacked(now, end));
+        uint withdrawPie = SplitDSRLike(split_).dcp(usr, class);
+        SplitDSRLike(split_).withdraw(usr, end, withdrawPie); // Merge ZCD and DCP before expiry to withdraw dai
     }
 
     // Calculate Pie, Claim DCP savings accrued, and Withdraw Dai to Vat.dai balance

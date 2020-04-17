@@ -72,7 +72,7 @@ contract ERC20AdapterTest is DSTest {
         z = add(mul(x, RAY), sub(y, 1)) / y;
     }
 
-    function day(uint x) internal returns (uint day_) {
+    function day(uint x) internal pure returns (uint day_) {
         day_ = add(DATE, x);
     }
 

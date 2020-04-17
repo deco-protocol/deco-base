@@ -66,7 +66,7 @@ contract SplitDSRTest is DSTest {
         z = add(mul(x, RAY), sub(y, 1)) / y;
     }
 
-    function day(uint x) internal returns (uint day_) {
+    function day(uint x) internal pure returns (uint day_) {
         day_ = add(DATE, x);
     }
 
@@ -125,7 +125,7 @@ contract SplitDSRTest is DSTest {
         bytes32 dcpClass1 = keccak256(abi.encodePacked(day(1), day(3)));
         bytes32 dcpClass2 = keccak256(abi.encodePacked(day(2), day(3)));
 
-        split.claim(self, day(1), day(3), now);
+        split.claim(self, day(1), day(3), now, split.dcp(self, dcpClass1));
         split.withdraw(self, day(3), split.dcp(self, dcpClass2));
         
         assertEq(wad(split.zcd(self, zcdClass)), 1 wei); // dcp balance 1 wei lower after claim due to rounding
@@ -142,14 +142,12 @@ contract SplitDSRTest is DSTest {
         hevm.warp(day(3));
         split.issue(self, day(5), val);
 
-        bytes32 zcdClass = keccak256(abi.encodePacked(day(5)));
-        bytes32 dcpClass1 = keccak256(abi.encodePacked(day(3), day(5)));
-        bytes32 dcpClass2 = keccak256(abi.encodePacked(day(1), day(5)));
+        bytes32 class = keccak256(abi.encodePacked(day(1), day(5)));
 
         uint daibalance = wad(vat.dai(self)); //balance: 89999988705974138589
 
         split.rewind(self, day(3), day(5), day(1), val); //balance: 89999977411935521676
-        split.claim(self, day(1), day(5), now); //balance: 89999988705974138589
+        split.claim(self, day(1), day(5), now, split.dcp(self, class)); //balance: 89999988705974138589
 
         assertEq(wad(vat.dai(self)), daibalance);
     }
@@ -188,20 +186,20 @@ contract SplitDSRTest is DSTest {
         assertEq(split.dcp(self, class3), val);
 
         hevm.warp(day(5));
-        split.claim(self, day(1), day(5), now);
+        split.claim(self, day(1), day(5), now, split.dcp(self, class2));
         assertEq(split.dcp(self, class1), 0);
 
         hevm.warp(day(6));
         uint chi_6 = split.snapshot();
         uint val_6 = (mul(val, chi_1) / chi_6);
-        split.convert(self, day(1), day(5), day(6), day(20));
+        split.convert(self, day(1), day(5), day(6), day(20), split.dcp(self, class3));
         bytes32 class4 = keccak256(abi.encodePacked(day(6), day(20)));
         assertEq(split.dcp(self, class4), val_6);
 
         hevm.warp(day(7));
         uint chi_7 = split.snapshot();
         uint val_7 = (mul(val_6, chi_6) / chi_7);
-        split.claim(self, day(6), day(20), now);
+        split.claim(self, day(6), day(20), now, split.dcp(self, class4));
         bytes32 class5 = keccak256(abi.encodePacked(day(7), day(20)));
         assertEq(split.dcp(self, class4), 0);
         assertEq(split.dcp(self, class5), val_7);
@@ -225,7 +223,7 @@ contract SplitDSRTest is DSTest {
         hevm.warp(day(2));
         uint chi_2 = split.snapshot();
         uint val_2 = (mul(val_1, chi_1) / chi_2);
-        split.claim(self, day(1), day(5), now);
+        split.claim(self, day(1), day(5), now, split.dcp(self, class2));
         bytes32 class4 = keccak256(abi.encodePacked(day(2), day(5)));
         assertEq(split.dcp(self, class1), 0);
         assertEq(split.dcp(self, class4), val_2 - 1 wei);

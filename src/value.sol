@@ -69,13 +69,13 @@ contract ValueDSR {
     }
 
     // Value of ZCD balance at calculated cashout ratio for end
-    function zcd(uint end, uint dai) public validEnd(end) returns (uint) {
+    function zcd(uint end, uint dai) public view validEnd(end) returns (uint) {
         require(ratio[end] != 0); // cashout ratio for class required
         return rmul(dai, sub(ONE, ratio[end])); // all zcd valued at 98.5% of dai
     }
 
     // Value of DCP balance at calculated cashout ratio for end
-    function dcp(uint end, uint dai) public validEnd(end) returns (uint) {
+    function dcp(uint end, uint dai) public view validEnd(end) returns (uint) {
         require(ratio[end] != 0); // cashout ratio for class required
         return rmul(dai, ratio[end]); // all dcp valued at 1.5% of dai
     }
