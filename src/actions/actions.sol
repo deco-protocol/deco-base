@@ -131,21 +131,41 @@ contract SplitDSRProxyActions is Common {
     }
 
     // Calculate Pie value and Issue ZCD & DCP using Vat.dai balance of usr
-    function calcAndIssueFromVat(address split_, address usr, uint end, uint wad) public {
+    function calcAndIssueNowFromVat(address split_, address usr, uint end, uint wad) public {
         uint pie = rdiv(wad, SplitDSRLike(split_).snapshot()); // Calculate Pie
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP
     }
 
     // Calculate Pie value and Issue ZCD & DCP using ERC20 Dai balance of usr
-    function calcAndIssueFromERC20(address split_, address daiJoin_, address usr, uint end, uint wad) public {
+    function calcAndIssueNowFromERC20(address split_, address daiJoin_, address usr, uint end, uint wad) public {
         moveERC20DaiToVat(daiJoin_, usr, wad); // Get Vat.dai balance
-        calcAndIssueFromVat(split_, usr, end, wad); // Issue ZCD & DCP using Vat.dai balance
+        calcAndIssueNowFromVat(split_, usr, end, wad); // Issue ZCD & DCP using Vat.dai balance
     }
 
     // Calculate Pie value and Issue ZCD & DCP using DSR pie balance of DSProxy
-    function calcAndIssueFromDSR(address split_, address pot_, address usr, uint end, uint pie) public {
+    function calcAndIssueNowFromDSR(address split_, address pot_, address usr, uint end, uint pie) public {
         PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP using Vat.dai balance
+    }
+
+    // Calculate Pie value and Issue ZCD & DCP valid from a past chi snapshot using Vat.dai balance of usr
+    function calcAndIssuePastFromVat(address split_, address usr, uint end, uint time, uint wad) public {
+        uint pie = rdiv(wad, SplitDSRLike(split_).snapshot()); // Calculate Pie
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
+        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
+    }
+
+    // Calculate Pie value and Issue ZCD & DCP valid from a past chi snapshot using ERC20 Dai balance of usr
+    function calcAndIssuePastFromERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint wad) public {
+        moveERC20DaiToVat(daiJoin_, usr, wad); // Get Vat.dai balance
+        calcAndIssuePastFromVat(split_, usr, time, end, wad); // Issue ZCD & DCP using Vat.dai balance at past chi snapshot
+    }
+
+    // Calculate Pie value and Issue ZCD & DCP using DSR pie balance of DSProxy valid from a past chi snapshot
+    function calcAndIssuePastFromDSR(address split_, address pot_, address usr, uint end, uint time, uint pie) public {
+        PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
+        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
     }
 
     // Redeem already takes wad instead of pie as input
