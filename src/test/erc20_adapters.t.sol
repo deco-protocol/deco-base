@@ -129,7 +129,7 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.join(self, day(10), balance);
+        zcdAdapter.join(self, class, balance);
 
         assertEq(split.zcd(self,class), 0);
         assertEq(ERC20(token).balanceOf(self), balance);
@@ -142,7 +142,7 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.join(self, day(10), balance);
+        zcdAdapter.join(self, class, balance);
     }
 
     function test_erc20_zcd_exit() public {
@@ -150,10 +150,10 @@ contract ERC20AdapterTest is DSTest {
         address token = zcdAdapter.deployToken(day(10));
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
-        zcdAdapter.join(self, day(10), balance);
+        zcdAdapter.join(self, class, balance);
 
         ERC20(token).approve(address(zcdAdapter), uint(-1));
-        zcdAdapter.exit(self, day(10), rad(1 ether));
+        zcdAdapter.exit(self, class, rad(1 ether));
 
         assertEq(split.zcd(self,class), rad(1 ether));
         assertEq(ERC20(token).balanceOf(self), balance - rad(1 ether));
@@ -173,7 +173,7 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
 
-        dcpAdapter.join(self, day(1), day(10), balance);
+        dcpAdapter.join(self, class, balance);
 
         assertEq(split.dcp(self,class), 0);
         assertEq(ERC20(token).balanceOf(self), balance);
@@ -186,7 +186,7 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
 
-        dcpAdapter.join(self, day(1), day(10), balance);
+        dcpAdapter.join(self, class, balance);
     }
 
     function test_erc20_dcp_exit() public {
@@ -194,10 +194,10 @@ contract ERC20AdapterTest is DSTest {
         address token = dcpAdapter.deployToken(day(1), day(10));
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
-        dcpAdapter.join(self, day(1), day(10), balance);
+        dcpAdapter.join(self, class, balance);
 
         ERC20(token).approve(address(dcpAdapter), uint(-1));
-        dcpAdapter.exit(self, day(1), day(10), 1 ether);
+        dcpAdapter.exit(self, class, 1 ether);
 
         assertEq(split.dcp(self,class), 1 ether);
         assertEq(ERC20(token).balanceOf(self), balance - 1 ether);
