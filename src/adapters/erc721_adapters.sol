@@ -37,7 +37,7 @@ contract LibNote {
     }
 }
 
-contract ZCDNFToken is NFToken, LibNote {
+contract SplitNFT is NFToken, LibNote {
     // --- Auth ---
     mapping (address => uint) public wards;
     function rely(address guy) external note auth { wards[guy] = 1; }
@@ -52,16 +52,16 @@ contract ZCDNFToken is NFToken, LibNote {
     }
 
     mapping(uint256 => bytes32) public class;
-    mapping(uint256 => uint) public amount; // rad
+    mapping(uint256 => uint) public amount;
     uint tokenId;
 
-    event NewZCDToken(uint256 indexed tokenId_, bytes32 indexed class_, uint amount_);
+    event NewToken(uint256 indexed tokenId_, bytes32 indexed class_, uint amount_);
 
     function mint(address usr, bytes32 class_, uint amount_) public auth {
         super._mint(usr, tokenId);
         class[tokenId] = class_;
         amount[tokenId] = amount_;
-        emit NewZCDToken(tokenId, class_, amount_);
+        emit NewToken(tokenId, class_, amount_);
 
         tokenId++;
     }
@@ -76,11 +76,11 @@ contract ZCDNFToken is NFToken, LibNote {
 
 contract ZCDAdapterERC721 {
     SplitDSRLike split;
-    ZCDNFToken zcdnft;
+    SplitNFT zcdnft;
 
     constructor(address splitdsr_) public {
         split = SplitDSRLike(splitdsr_);
-        zcdnft = new ZCDNFToken();
+        zcdnft = new SplitNFT();
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
@@ -108,50 +108,13 @@ contract ZCDAdapterERC721 {
     }
 }
 
-contract DCPNFToken is NFToken, LibNote {
-    // --- Auth ---
-    mapping (address => uint) public wards;
-    function rely(address guy) external note auth { wards[guy] = 1; }
-    function deny(address guy) external note auth { wards[guy] = 0; }
-    modifier auth {
-        require(wards[msg.sender] == 1, "not-authorized");
-        _;
-    }
-
-    constructor() public {
-        wards[msg.sender] = 1;
-    }
-
-    mapping(uint256 => bytes32) public class;
-    mapping(uint256 => uint) public amount; // wad
-    uint tokenId;
-
-    event NewDCPToken(uint256 indexed tokenId_, bytes32 indexed class_, uint amount_);
-
-    function mint(address usr, bytes32 class_, uint amount_) public auth {
-        super._mint(usr, tokenId);
-        class[tokenId] = class_;
-        amount[tokenId] = amount_;
-        emit NewDCPToken(tokenId, class_, amount_);
-
-        tokenId++;
-    }
-
-    function burn(uint tokenId_) public auth {
-        super._burn(tokenId_);
-
-        delete class[tokenId_];
-        delete amount[tokenId_];
-    }
-}
-
 contract DCPAdapterERC721 {
     SplitDSRLike split;
-    DCPNFToken dcpnft;
+    SplitNFT dcpnft;
 
     constructor(address splitdsr_) public {
         split = SplitDSRLike(splitdsr_);
-        dcpnft = new DCPNFToken();
+        dcpnft = new SplitNFT();
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
