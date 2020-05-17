@@ -37,8 +37,9 @@ contract LibNote {
     }
 }
 
+// Base ERC721 Token contract for ZCDAdapterERC721 and DCPAdapterERC721
 contract SplitNFT is NFToken, LibNote {
-    // --- Auth ---
+    // --- Contract Auth ---
     mapping (address => uint) public wards;
     function rely(address guy) external note auth { wards[guy] = 1; }
     function deny(address guy) external note auth { wards[guy] = 0; }
@@ -48,12 +49,13 @@ contract SplitNFT is NFToken, LibNote {
     }
 
     constructor() public {
-        wards[msg.sender] = 1;
+        wards[msg.sender] = 1; // give adapter auth permissions
     }
 
-    mapping(uint256 => bytes32) public class;
-    mapping(uint256 => uint) public amount;
-    uint tokenId;
+    // NFT Metadata
+    mapping(uint256 => bytes32) public class; // NFT token id => Class
+    mapping(uint256 => uint) public amount; // NFT token id => Balance
+    uint tokenId; // Total tokens minted
 
     event NewToken(uint256 indexed tokenId_, bytes32 indexed class_, uint amount_);
 

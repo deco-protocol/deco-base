@@ -50,10 +50,11 @@ contract SplitDSR {
     }
 
     // --- Approvals ---
-    mapping(address => mapping (address => bool)) public approvals;
+    mapping(address => mapping (address => bool)) public approvals; // holder address => approved address => approval status
 
     event Approval(address indexed sender, address indexed usr, bool approval);
-    
+
+    // Allow/disallow an address to perform actions on balances within split and adapters
     function approve(address usr, bool approval) external {
         approvals[msg.sender][usr] = approval;
         emit Approval(msg.sender, usr, approval);
@@ -66,23 +67,22 @@ contract SplitDSR {
 
     VatLike public vat;
     PotLike public pot;
-
-    ValueDSRLike public value;
-
-    uint public last; // emergency shutdown timestamp
+ 
+    ValueDSRLike public value; // Reports ZCD and DCP valuation to process emergency shutdown
+    uint public last; // Split emergency shutdown timestamp
 
     constructor(address pot_, address value_) public {
         pot = PotLike(pot_);
         vat = pot.vat();
         value = ValueDSRLike(value_);
 
-        last = uint(-1);
-        vat.hope(address(pot));
+        last = uint(-1); // Initialized to MAX_UINT and updated after emergency shutdown is triggered on Pot
+        vat.hope(address(pot)); // Approve Pot to modify Split's Dai balance within Vat
     }
 
-    mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance [rad]
-    mapping (address => mapping (bytes32 => uint)) public dcp; // user address => dcp class => dcp balance [wad]
-    mapping (uint => uint) public chi; // time => pot.chi value [ray]
+    mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance [rad: 45 decimal fixed point number]
+    mapping (address => mapping (bytes32 => uint)) public dcp; // user address => dcp class => dcp balance [wad: 18 decimal fixed point number]
+    mapping (uint => uint) public chi; // time => pot.chi value [ray: 27 decimal fixed point number]
     uint public totalSupply; // total ZCD supply [rad]
 
     event MintZCD(address indexed usr, bytes32 indexed class, uint end, uint dai);
@@ -97,16 +97,17 @@ contract SplitDSR {
 
     // --- Emergency Shutdown Modifiers ---
     modifier untilLast(uint time) {
-        require(time <= last); // timestamp before or at emergency shutdown
+        require(time <= last); // execute normally when input timestamp is before or at emergency shutdown timestamp
         _;
     }
 
     modifier afterLast(uint time) {
-        require(last < time); // time greater than emergency shutdown timestamp
+        require(last < time); // allow emergency shutdown processing when input timestamp is after emergency shutdown timestamp
         _;
     }
 
     // --- Internal functions ---
+    // Mint ZCD balance with maturity set to end timestamp
     function mintZCD(address usr, uint end, uint dai) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
@@ -115,6 +116,7 @@ contract SplitDSR {
         emit MintZCD(usr, class, end, dai);
     }
 
+    // Burn ZCD balance with maturity set to end timestamp
     function burnZCD(address usr, uint end, uint dai) internal {
         bytes32 class = keccak256(abi.encodePacked(end));
 
@@ -125,6 +127,7 @@ contract SplitDSR {
         emit BurnZCD(usr, class, end, dai);
     }
 
+    // Mint DCP balance with start and end timestamps
     function mintDCP(address usr, uint start, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
@@ -132,6 +135,7 @@ contract SplitDSR {
         emit MintDCP(usr, class, start, end, pie);
     }
 
+    // Burn DCP balance with start and end timestamps
     function burnDCP(address usr, uint start, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, end));
 
@@ -141,6 +145,7 @@ contract SplitDSR {
         emit BurnDCP(usr, class, start, end, pie);
     }
 
+    // Mint Future DCP balance with start, slice, and end timestamps
     function mintFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, slice, end));
 
@@ -148,6 +153,7 @@ contract SplitDSR {
         emit MintFutureDCP(usr, class, start, slice, end, pie);
     }
 
+    // Burn Future DCP balance with start, slice, and end timestamps
     function burnFutureDCP(address usr, uint start, uint slice, uint end, uint pie) internal {
         bytes32 class = keccak256(abi.encodePacked(start, slice, end));
 
@@ -158,7 +164,7 @@ contract SplitDSR {
     }
 
     // --- External and Public functions ---
-    // Transfers ZCD balance of a certain class
+    // Transfer ZCD balance
     function moveZCD(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(zcd[src][class] >= dai, "zcd/insufficient-balance");
 
@@ -168,7 +174,7 @@ contract SplitDSR {
         emit MoveZCD(src, dst, class, dai);
     }
 
-    // Transfers DCP balance of a certain class
+    // Transfer DCP or FutureDCP balance
     function moveDCP(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(dcp[src][class] >= pie, "dcp/insufficient-balance");
 
@@ -178,112 +184,148 @@ contract SplitDSR {
         emit MoveDCP(src, dst, class, pie);
     }
 
-    // Snapshots chi value at a particular time
+    // Snapshot and store updated chi value at current block timestamp
     function snapshot() public returns (uint chi_) {
-        chi_ = pot.drip();
+        chi_ = pot.drip(); // Update chi in Pot
         chi[now] = chi_;
         emit ChiSnapshot(now, chi_);
     }
 
-    // Locks dai in DSR contract to mint ZCD and DCP balance
+    // Issue ZCD and DCP in exchange for dai
+    // * User transfers dai balance to Split
+    // * User receives ZCD balance equal to the dai balance which we'll refer to as the notional amount
+    // * User receives DCP balance equal to the pie balance of the DSR deposit (pie = dai notional amount / current chi value)
     function issue(address usr, uint end, uint pie) external approved(usr) untilLast(now) {
-        require(now <= end);
+        require(now <= end); // Assets can only be issued with future maturity
 
-        uint dai = mul(pie, snapshot());
-        vat.move(usr, address(this), dai);
-        pot.join(pie);
+        uint dai = mul(pie, snapshot()); // Calculate dai amount with pie input. pie is the equivalent normalized dai balance stored in Pot at current chi value: pie * chi = dai
+        vat.move(usr, address(this), dai); // Move dai from usr to Split
+        pot.join(pie); // Split deposits dai into Pot
 
-        mintZCD(usr, end, dai);
-        mintDCP(usr, now, end, pie);
+        mintZCD(usr, end, dai); // Mint ZCD balance for dai amount at end. dai is 45 decimal fixed point number.
+        mintDCP(usr, now, end, pie); // Mint DCP balance for pie value between now and end timestamps. pie is 18 decimal fixed point number.
     }
 
     // Redeem ZCD for dai after maturity
-    function redeem(address usr, uint end, uint time, uint dai) external approved(usr) untilLast(end) {
-        require((end <= time) && (time <= now));
+    // * User transfers ZCD balance to Split
+    // * User receives dai balance equal to the ZCD balance
+    // * User receives DSR earnt on this dai balance after end until redemption if a valid snapshot is present
+    function redeem(address usr, uint end, uint snap, uint dai) external approved(usr) untilLast(end) {
+        require((end <= snap) && (snap <= now)); // Redemption can happen only after end timestamp is past. Snap timestamp needs to be after end but before now.
 
-        uint chiTime = chi[time];
-        uint chiNow = snapshot();
-        require(chiTime != 0);
+        uint chiSnap = chi[snap]; // chi value at snap timestamp
+        uint chiNow = snapshot(); // current chi value
+        require(chiSnap != 0); // ensure a valid chi snapshot exists before calculating any DSR earnt
 
-        burnZCD(usr, end, dai);
+        burnZCD(usr, end, dai); // Burn ZCD balance
 
-        uint pie = dai / chiTime; // calculate pie with earlier time of deposit // rad / ray -> wad 
-        pot.exit(pie); // payout pie at current chi value
-        vat.move(address(this), usr, mul(pie, chiNow)); // dai paid out with savings earnt after maturity
+        // Calculate pie assuming user redeemed dai in the past at end timestamp and deposited it in Pot at snap timestamp
+        uint pie = dai / chiSnap; // rad / ray -> wad
+        pot.exit(pie); // pie removed from Pot
+        vat.move(address(this), usr, mul(pie, chiNow)); // Total payout to user is redeemed dai + dsr earnt from snap timestamp until now
     }
 
-    // Claims coupon payments
-    function claim(address usr, uint start, uint end, uint time, uint pie) external approved(usr) untilLast(time) {
-        require((start <= time) && (time <= end));
+    // Claim dai earnt by DCP balance from the Dai Savings Rate
+    // * User transfers DCP balance to Split
+    // * User receives dai earnt from DSR by this pie balance beween start and snap timestamps
+    // * DCP balance burnt for the time period between start and snap timestamps
+    // * User receives DCP balance with new class for remaining time period between snap and end timestamps
+    function claim(address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilLast(snap) {
+        require((start <= snap) && (snap <= end));
 
-        uint chiNow = snapshot();
-        uint chiStart = chi[start];
-        uint chiTime = chi[time];
+        uint chiNow = snapshot(); // current chi value
+        uint chiStart = chi[start]; // chi value at start timestamp
+        uint chiSnap = chi[snap]; // chi value at snap timestamp
 
-        require((chiStart != 0) && (chiTime != 0) && (chiTime > chiStart));
+        require((chiStart != 0) && (chiSnap != 0) && (chiSnap > chiStart));
 
-        burnDCP(usr, start, end, pie);
-        mintDCP(usr, time, end, rdiv(rmul(pie, chiStart), chiTime)); // division rounds down wad
+        burnDCP(usr, start, end, pie); // Burn entire DCP balance
 
-        uint pieOut = mul(pie, sub(chiTime, chiStart)) / chiNow; // wad * ray / ray -> wad
+        // Mint DCP balance for remaining time period between snap and end
+        // This balance won't be usable if end is in the past and no other snapshot between snap and end exists
+        // Division rounds down and new balance might be slightly lower
+        mintDCP(usr, snap, end, rdiv(rmul(pie, chiStart), chiSnap));
+
+        // dai earnt by deposit as savings between two chi values is moved out. Deposit remains in Pot.
+        uint pieOut = mul(pie, sub(chiSnap, chiStart)) / chiNow; // wad * ray / ray -> wad
 
         pot.exit(pieOut);
-        vat.move(address(this), usr, mul(pieOut, chiNow));
+        vat.move(address(this), usr, mul(pieOut, chiNow)); // Dai earnt sent to DCP owner
     }
 
-    // Pay dai to rewind the start timestamp of a dcp balance back to time timestamp
-    function rewind(address usr, uint start, uint end, uint time, uint pie) external approved(usr) untilLast(now) {
-        require((time <= start) && (start <= end));
+    // Rewind start timestamp of DCP balance to a past snapshot timestamp (opposite of claim which forwards start timestamp to a future snapshot)
+    // * User transfers DCP balance
+    // * User transfers dai balance to cover the additional savings they will be entitled to after rewind
+    // * User receives DCP balance at new class with start timestamp set to an earlier chi snapshot
+    function rewind(address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilLast(now) {
+        require((snap <= start) && (start <= end));
 
         uint chiNow = snapshot();
-        uint chiTime = chi[time];
+        uint chiSnap = chi[snap];
         uint chiStart = chi[start];
 
-        require((chiTime != 0) && (chiStart != 0) && (chiTime < chiStart));
+        require((chiSnap != 0) && (chiStart != 0) && (chiSnap < chiStart));
 
-        uint notional = mul(pie, chiStart); // wad * ray -> rad
-        uint pieTime = notional / chiTime; // rad / ray -> wad
-        uint total = mul(pieTime, chiStart); // wad * ray -> rad // total at start for notional deposited at time
+        uint notional = mul(pie, chiStart); // notional amount in dai earning DSR from start for current dcp balance. wad * ray -> rad
+        uint pieSnap = notional / chiSnap; // pie value for the same notional amount if deposited at the earlier snap timestamp. rad / ray -> wad
 
-        burnDCP(usr, start, end, pie);
-        mintDCP(usr, time, end, pieTime);
+        // New total dai amount at start timestamp with earlier deposit = notional amount + dai earnt from dsr between snap and start timestamps
+        uint total = mul(pieSnap, chiStart); // wad * ray -> rad 
 
+        burnDCP(usr, start, end, pie); // Burn old DCP balance between start and end timestamps
+
+        // New DCP balance is higher to reflect the same dai notional amount earning DSR starting from an earlier timestamp
+        mintDCP(usr, snap, end, pieSnap); // Mint new DCP balance between snap and end timestamps.
+
+        // Difference between new total and old notional amount at the start timestamp, in pie terms at current chi value
         uint pieIn = sub(total, notional) / chiNow; // (rad - rad) / ray -> wad
 
-        vat.move(usr, address(this), mul(pieIn, chiNow));
-        pot.join(pieIn);
+        vat.move(usr, address(this), mul(pieIn, chiNow)); // Collect dai from user for this adjustment
+        pot.join(pieIn); // Deposit dai in Pot
     }
 
-    // Merge equal amounts of ZCD and DCP of same class to withdraw dai
+    // Withdraw ZCD and DCP before maturity to dai
+    // * User transfers ZCD balance with an end timestamp 
+    // * User transfers DCP balance with savings claimed until now and the same end timestamp as ZCD
+    // * User receives dai from Split equal to both their dai notional amounts
     function withdraw(address usr, uint end, uint pie) external approved(usr) untilLast(now) {
-        uint dai = mul(pie, snapshot());
+        uint dai = mul(pie, snapshot()); // dai notional amount calculated from input pie value
         pot.exit(pie);
         vat.move(address(this), usr, dai);
 
         burnZCD(usr, end, dai);
-        burnDCP(usr, now, end, pie); // DCP should be fully claimed
+        burnDCP(usr, now, end, pie); // DCP balance needs to be claimed from its start until current timestamp
     }
 
-    // Splits a DCP balance into two contiguous DCP balances(current, future)
+    // Slice a DCP balance at a future timestamp into contiguous DCP and FutureDCP balances
+    // * User transfers DCP balance with t1 and t3 timestamps
+    // * User receives DCP balance with t1 and t2 timestamps
+    // * User receives FutureDCP balance that can be converted later to regular DCP balance with t2 and t3 timestamps
     function slice(address usr, uint t1, uint t2, uint t3, uint pie) external approved(usr) {
-        require(t1 < t2 && t2 < t3);
+        require(t1 < t2 && t2 < t3); // slice timestamp t2 needs to be between t1 and t3
 
         burnDCP(usr, t1, t3, pie);
         mintDCP(usr, t1, t2, pie);
-        mintFutureDCP(usr, t1, t2, t3, pie); // (t1 * pie) balance can be activated later from t2 to t3
+        mintFutureDCP(usr, t1, t2, t3, pie); // Earns DSR between t2 and t3 timestamps on the original dai notional amount (pie * chi[t1])
     }
 
-    // Merges two continguous DCP balances(current, future) into one DCP balance
+    // Merge continguous DCP and FutureDCP balances into a DCP balance
+    // * User transfers a DCP balance with t2 and t3 timestamps
+    // * User transfers a FutureDCP with t1, t3 and t4 timestamps
+    // * User receives a DCP balance with t2 and t4 timestamps
     function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
-        uint futurePie = (t1 == t2) ? pie : mul(pie, chi[t2]) / chi[t1];
+        uint futurePie = (t1 == t2) ? pie : mul(pie, chi[t2]) / chi[t1]; // FutureDCP balance that needs to be burnt if t1 and t2 are not equal
 
         burnDCP(usr, t2, t3, pie);
         burnFutureDCP(usr, t1, t3, t4, futurePie);
         mintDCP(usr, t2, t4, pie);
     }
 
-    // Splits a future DCP balance into two contiguous future DCP balances
+    // Slice a FutureDCP balance into two contiguous FutureDCP balances
+    // * User transfers FutureDCP balance with t1, t2 and t4 timestamps
+    // * User receives FutureDCP balance with t1, t2 and t3 timestamps
+    // * User receives FutureDCP balance with t1, t3 and t4 timestamps
     function sliceFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
 
@@ -292,7 +334,10 @@ contract SplitDSR {
         mintFutureDCP(usr, t1, t3, t4, pie);
     }
 
-    // Merges two continguous future DCP balances into one future DCP balance
+    // Merge two continguous FutureDCP balances into a FutureDCP balance
+    // * User transfers FutureDCP balance with t1, t2 and t3 timestamps
+    // * User transfers FutureDCP balance with t1, t3 and t4 timestamps
+    // * User receives FutureDCP balance with t1, t2 and t4 timestamps
     function mergeFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 < t2 && t2 < t3 && t3 < t4);
 
@@ -301,51 +346,43 @@ contract SplitDSR {
         mintFutureDCP(usr, t1, t2, t4, pie);
     }
 
-    // Converts future DCP balance to current DCP balance
+    // Convert FutureDCP balance into a regular DCP balance once a chi snapshot becomes available after sliced timestamp
+    // * User transfers FutureDCP balance with t1, t2 and t4 timestamps
+    // * User receives DCP balance with t3 and t4 timestamps
+    // * t3 is the closest timestamp at which a chi snapshot is available after t2
     function convert(address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) untilLast(t3) {
-        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3
+        require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3 if the sliced timestamp has a chi snapshot
 
-        require(chi[t1] != 0); // used to retrieve original notional amount
-        require(chi[t3] != 0); // snapshot needs to exist at t3 for dcp activation
+        require(chi[t1] != 0); // chi value at t1 is used to calculate original dai notional amount
+        require(chi[t3] != 0); // chi value snapshot needs to exist to create DCP balance with start timestamp set to t3
 
-        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original balance renormalized to later snapshot
+        uint newpie = mul(pie, chi[t1]) / chi[t3]; // original dai notional amount normalized with chi value at t3 timestamp for new DCP balance
 
         burnFutureDCP(usr, t1, t2, t4, pie);
-        mintDCP(usr, t3, t4, newpie); // savings earnt lost from t2 to t3 when they aren't equal
+        mintDCP(usr, t3, t4, newpie); // savings earnt between t2 to t3 are lost if they aren't equal
     }
 
-    // Set last timestamp if Pot is under emergency shutdown
+    // Emergency Shutdown Split after Pot is caged
     function cage() external {
         require(pot.live() == 0); // Pot needs to be caged
-        require(last == uint(-1)); // last shouldn't be set
-        require(value.split() == address(this)); // SplitDSR address set in ValueDSR matches
+        require(last == uint(-1)); // last timestamp can be set only once
+        require(value.split() == address(this)); // SplitDSR address set in ValueDSR matches this contract address
 
-        snapshot(); // snapshot is taken for claims processing until last
-        last = now; // last timestamp set to now
+        snapshot(); // Snapshot is taken at last timestamp
+        last = now; // set last timestamp
     }
 
-    // Before cashing zcd and dcp,
-    // * execute value.update() once to set value.last
-    // * execute value.calculate() for each end timestamp where zcd or dcp needs cashing out
+    // Emergency Shutdown processing in ValueDSR before ZCD and DCP balances with end timestamps after last can be cashed
+    // * Execute Value.update() once to set last timestamp in ValueDSR
+    // * Execute Value.calculate(end) for all future end timestamps
 
-    // Cash out ZCD redeemable after emergency shutdown
+    // Exchange ZCD balance for Dai after emergency shutdown
+    // * User transfers ZCD balance with end timestamp greater than last
+    // * User receives the dai value reported by ValueDSR
     function cashZCD(address usr, uint end, uint dai) external afterLast(end) {
-        burnZCD(usr, end, dai); // burn zcd balance
+        burnZCD(usr, end, dai);
 
-        uint cash = value.zcd(end, dai); // get value of zcd balance in dai
-
-        uint chiNow = pot.drip(); // drip pot and retreive current chi
-        uint pieOut = cash / chiNow;
-        pot.exit(pieOut);
-        vat.move(address(this), usr, mul(pieOut, chiNow));
-    }
-
-    // Cash out DCP with valid claim on savings after emergency shutdown
-    function cashDCP(address usr, uint end, uint pie) external afterLast(end) {
-        burnDCP(usr, last, end, pie); // burn dcp balance
-
-        uint dai = mul(pie, chi[last]);
-        uint cash = value.dcp(end, dai); // get value of dcp balance in dai
+        uint cash = value.zcd(end, dai); // Get value of ZCD balance in dai from ValueDSR
 
         uint chiNow = pot.drip();
         uint pieOut = cash / chiNow;
@@ -353,12 +390,31 @@ contract SplitDSR {
         vat.move(address(this), usr, mul(pieOut, chiNow));
     }
 
-    // Cash out Future DCP with valid claim on savings after emergency shutdown
-    function cashFutureDCP(address usr, uint start, uint split, uint end, uint pie) external afterLast(split) {
-        burnFutureDCP(usr, start, split, end, pie); // burn future dcp balance
+    // Exchange DCP balance for Dai after emergency shutdown
+    // * User transfers DCP balance with end timestamp greater than last
+    // * User receives the dai value reported by ValueDSR
+    function cashDCP(address usr, uint end, uint pie) external afterLast(end) {
+        burnDCP(usr, last, end, pie); // Savings earnt until last need to be claimed prior to cashing out
 
-        uint dai = mul(pie, chi[start]);
-        uint cash = sub(value.dcp(end, dai), value.dcp(split, dai));
+        uint dai = mul(pie, chi[last]);
+        uint cash = value.dcp(end, dai); // Get value of DCP balance in dai from ValueDSR
+
+        uint chiNow = pot.drip();
+        uint pieOut = cash / chiNow;
+        pot.exit(pieOut);
+        vat.move(address(this), usr, mul(pieOut, chiNow));
+    }
+
+    // Exchange FutureDCP balance for Dai after emergency shutdown
+    // * User transfers FutureDCP balance with slice timestamp greater than last
+    // * User receives the dai value reported by ValueDSR
+    function cashFutureDCP(address usr, uint start, uint slice, uint end, uint pie) external afterLast(slice) {
+        burnFutureDCP(usr, start, slice, end, pie);
+
+        uint dai = mul(pie, chi[start]); // calculate original dai notional amount
+
+        // FutureDCP value calculated from values in dai reported by ValueDSR for DCP balances with end timestamps at slice and end
+        uint cash = sub(value.dcp(end, dai), value.dcp(slice, dai));
 
         uint chiNow = pot.drip();
         uint pieOut = cash / chiNow;

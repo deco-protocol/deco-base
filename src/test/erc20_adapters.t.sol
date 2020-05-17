@@ -118,13 +118,13 @@ contract ERC20AdapterTest is DSTest {
     function test_deploy_zcdtoken() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
 
-        address token = zcdAdapter.deployToken(day(10));
+        address token = zcdAdapter.deployToken(class);
         assertEq(token, zcdAdapter.tokens(class));
     }
 
     function test_erc20_zcd_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
-        address token = zcdAdapter.deployToken(day(10));
+        address token = zcdAdapter.deployToken(class);
 
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
@@ -147,7 +147,7 @@ contract ERC20AdapterTest is DSTest {
 
     function test_erc20_zcd_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
-        address token = zcdAdapter.deployToken(day(10));
+        address token = zcdAdapter.deployToken(class);
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
         zcdAdapter.join(self, class, balance);
@@ -162,13 +162,13 @@ contract ERC20AdapterTest is DSTest {
     function test_deploy_dcptoken() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
 
-        address token = dcpAdapter.deployToken(day(1), day(10));
+        address token = dcpAdapter.deployToken(class);
         assertEq(token, dcpAdapter.tokens(class));
     }
 
     function test_erc20_dcp_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
-        address token = dcpAdapter.deployToken(day(1), day(10));
+        address token = dcpAdapter.deployToken(class);
 
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
@@ -191,7 +191,7 @@ contract ERC20AdapterTest is DSTest {
 
     function test_erc20_dcp_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
-        address token = dcpAdapter.deployToken(day(1), day(10));
+        address token = dcpAdapter.deployToken(class);
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
         dcpAdapter.join(self, class, balance);

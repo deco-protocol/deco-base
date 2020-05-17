@@ -29,8 +29,8 @@ contract ZCDAdapterERC20 {
         _;
     }
 
-    function deployToken(uint end) public returns (address) {
-        bytes32 class = keccak256(abi.encodePacked(end));
+    // Deploy an ERC20 token contract for a ZCD class
+    function deployToken(bytes32 class) public returns (address) {
         require(address(tokens[class]) == address(0), "zcd/token-exists");
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("ZCD ", class)), "ZCD", "1", 45);
@@ -77,8 +77,8 @@ contract DCPAdapterERC20 {
         _;
     }
 
-    function deployToken(uint start, uint end) public returns (address) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
+    // Deploy an ERC20 token contract for a DCP/FutureDCP class
+    function deployToken(bytes32 class) public returns (address) {
         require(address(tokens[class]) == address(0), "dcp/token-exists");
 
         ERC20 token = new ERC20(chainId, string(abi.encodePacked("DCP ", class)), "DCP", "1", 18);

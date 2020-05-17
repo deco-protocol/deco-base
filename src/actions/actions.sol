@@ -94,18 +94,18 @@ contract Common {
 
 contract SplitDSRProxyActions is Common {
     // Move ERC20 Dai balance to Vat.dai
-    function moveERC20DaiToVat(address daiJoin_, address usr, uint wad) public {
-        DaiJoinLike(daiJoin_).dai().transferFrom(usr, address(this), wad); // Ensure DSProxy contract is approved by usr
-        DaiJoinLike(daiJoin_).dai().approve(daiJoin_, wad); // Approve DaiJoin adapter to withdraw from DSProxy's Dai token balance
-        DaiJoinLike(daiJoin_).join(usr, wad); // DaiJoin burns Dai ERC20 balance and issues usr a Vat.dai balance
+    function moveERC20DaiToVat(address daiJoin_, address usr, uint dai) public {
+        DaiJoinLike(daiJoin_).dai().transferFrom(usr, address(this), dai); // Ensure DSProxy contract is approved by usr
+        DaiJoinLike(daiJoin_).dai().approve(daiJoin_, dai); // Approve DaiJoin adapter to withdraw from DSProxy's Dai token balance
+        DaiJoinLike(daiJoin_).join(usr, dai); // DaiJoin burns Dai ERC20 balance and issues usr a Vat.dai balance
     }
 
-    // Move entire Vat.dai balance to Dai ERC20 token
+    // Move total Vat.dai balance to Dai ERC20 token
     function moveAllVatDaiToERC20(address daiJoin_, address usr) public {
         VatLike vat = DaiJoinLike(daiJoin_).vat();
 
-        uint bal = vat.dai(usr); // Read total usr's Vat.dai balance
-        vat.move(usr, address(this), bal); // Ensure DSProxy is approved by usr in Vat to move Vat.dai balance
+        uint bal = vat.dai(usr); // usr's Vat.dai balance
+        vat.move(usr, address(this), bal); // Ensure DSProxy contract is approved by usr in Vat to move Vat.dai balance
 
         if (vat.can(address(this), address(daiJoin_)) == 0) {
             vat.hope(daiJoin_); // DSProxy allows DaiJoin adapter to move its Vat.dai balance
@@ -115,11 +115,11 @@ contract SplitDSRProxyActions is Common {
         DaiJoinLike(daiJoin_).exit(usr, (bal / ONE)); // Transfer Vat.dai balance to adapter and mint Dai ERC20 balance for usr
     }
 
-    // Move entire Vat.dai balance to Pot balance of DSProxy
+    // Move total Vat.dai balance to Pot balance of DSProxy
     function moveAllVatDaiToDSR(address pot_, address usr) public {
         VatLike vat = PotLike(pot_).vat();
 
-        uint bal = vat.dai(usr); // Read total usr's Vat.dai balance
+        uint bal = vat.dai(usr); // usr's Vat.dai balance
         vat.move(usr, address(this), bal); // Ensure DSProxy is approved by usr in Vat to move Vat.dai balance
 
         if (vat.can(address(this), address(pot_)) == 0) {
@@ -130,55 +130,55 @@ contract SplitDSRProxyActions is Common {
         PotLike(pot_).join(pie); // (pie * chi) could be slightly lower than bal because division in previous step rounds down
     }
 
-    // Calculate Pie value and Issue ZCD & DCP using Vat.dai balance of usr
-    function calcAndIssueNowFromVat(address split_, address usr, uint end, uint wad) public {
-        uint pie = rdiv(wad, SplitDSRLike(split_).snapshot()); // Calculate Pie
+    // Calculate Pie value from dai amount and Issue ZCD & DCP using Vat.dai balance of usr
+    function calcAndIssueNowFromVat(address split_, address usr, uint end, uint dai) public {
+        uint pie = rdiv(dai, SplitDSRLike(split_).snapshot()); // Calculate Pie
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP
     }
 
-    // Calculate Pie value and Issue ZCD & DCP using ERC20 Dai balance of usr
-    function calcAndIssueNowFromERC20(address split_, address daiJoin_, address usr, uint end, uint wad) public {
-        moveERC20DaiToVat(daiJoin_, usr, wad); // Get Vat.dai balance
-        calcAndIssueNowFromVat(split_, usr, end, wad); // Issue ZCD & DCP using Vat.dai balance
+    // Calculate Pie value from dai amount and Issue ZCD & DCP using ERC20 Dai balance of usr
+    function calcAndIssueNowFromERC20(address split_, address daiJoin_, address usr, uint end, uint dai) public {
+        moveERC20DaiToVat(daiJoin_, usr, dai); // Get Vat.dai balance
+        calcAndIssueNowFromVat(split_, usr, end, dai); // Issue ZCD & DCP using Vat.dai balance
     }
 
-    // Calculate Pie value and Issue ZCD & DCP using DSR pie balance of DSProxy
-    function calcAndIssueNowFromDSR(address split_, address pot_, address usr, uint end, uint pie) public {
+    // Issue ZCD & DCP using DSR pie balance of DSProxy
+    function issueNowFromDSR(address split_, address pot_, address usr, uint end, uint pie) public {
         PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP using Vat.dai balance
     }
 
-    // Calculate Pie value and Issue ZCD & DCP valid from a past chi snapshot using Vat.dai balance of usr
-    function calcAndIssuePastFromVat(address split_, address usr, uint end, uint time, uint wad) public {
-        uint pie = rdiv(wad, SplitDSRLike(split_).snapshot()); // Calculate Pie
+    // Calculate Pie value from dai amount and Issue ZCD & DCP valid from a past chi snapshot using Vat.dai balance of usr
+    function calcAndIssuePastFromVat(address split_, address usr, uint end, uint time, uint dai) public {
+        uint pie = rdiv(dai, SplitDSRLike(split_).snapshot()); // Calculate Pie
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
         SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
     }
 
-    // Calculate Pie value and Issue ZCD & DCP valid from a past chi snapshot using ERC20 Dai balance of usr
-    function calcAndIssuePastFromERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint wad) public {
-        moveERC20DaiToVat(daiJoin_, usr, wad); // Get Vat.dai balance
-        calcAndIssuePastFromVat(split_, usr, time, end, wad); // Issue ZCD & DCP using Vat.dai balance at past chi snapshot
+    // Calculate Pie value from dai amount and Issue ZCD & DCP valid from a past chi snapshot using ERC20 Dai balance of usr
+    function calcAndIssuePastFromERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint dai) public {
+        moveERC20DaiToVat(daiJoin_, usr, dai); // Get Vat.dai balance
+        calcAndIssuePastFromVat(split_, usr, end, time, dai); // Issue ZCD & DCP using Vat.dai balance at past chi snapshot
     }
 
-    // Calculate Pie value and Issue ZCD & DCP using DSR pie balance of DSProxy valid from a past chi snapshot
-    function calcAndIssuePastFromDSR(address split_, address pot_, address usr, uint end, uint time, uint pie) public {
+    // Issue ZCD & DCP using DSR pie balance of DSProxy valid from a past chi snapshot
+    function issuePastFromDSR(address split_, address pot_, address usr, uint end, uint time, uint pie) public {
         PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
         SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
         SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
     }
 
-    // Redeem already takes wad instead of pie as input
+    // Redeem doesn't need a proxy action to calculate pie input since it takes wad
 
-    // Calculate Pie value and Redeem ZCD to ERC20 Dai balance of usr
-    function calcAndRedeemToERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint wad) public {
-        SplitDSRLike(split_).redeem(usr, end, time, wad); // Redeem ZCD after maturity to Vat.dai balance
+    // Redeem ZCD to ERC20 Dai balance of usr
+    function redeemToERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint dai) public {
+        SplitDSRLike(split_).redeem(usr, end, time, dai); // Redeem ZCD after maturity to Vat.dai balance
         moveAllVatDaiToERC20(daiJoin_, usr); // Move entire Vat.dai balance to Dai ERC20 token
     }
 
-    // Calculate Pie value and Redeem ZCD to DSR pie balance of DSProxy
-    function calcAndRedeemToDSR(address split_, address pot_, address usr, uint end, uint time, uint wad) public {
-        SplitDSRLike(split_).redeem(usr, end, time, wad); // Redeem ZCD after maturity to Vat.dai balance
+    // Redeem ZCD to DSR pie balance of DSProxy
+    function redeemToDSR(address split_, address pot_, address usr, uint end, uint time, uint dai) public {
+        SplitDSRLike(split_).redeem(usr, end, time, dai); // Redeem ZCD after maturity to Vat.dai balance
         moveAllVatDaiToDSR(pot_, usr); // Move all Vat.dai balance to DSProxy's Pot balance
     }
 
@@ -213,34 +213,28 @@ contract SplitDSRProxyActions is Common {
         moveAllVatDaiToDSR(pot_, usr);
     }
 
-    // Claim DCP savings accrued and Withdraw Dai using Pie value as input
-    function claimAndWithdraw(address split_, address usr, uint start, uint end, uint pie) public {
+    // Claim DCP savings accrued and Withdraw Dai to Vat.dai balance
+    function claimAndWithdrawToVat(address split_, address usr, uint start, uint end, uint pie) public {
         SplitDSRLike(split_).claim(usr, start, end, now, pie); // Withdraw cannot be executed until all savings are claimed until now
         bytes32 class = keccak256(abi.encodePacked(now, end));
         uint withdrawPie = SplitDSRLike(split_).dcp(usr, class);
         SplitDSRLike(split_).withdraw(usr, end, withdrawPie); // Merge ZCD and DCP before expiry to withdraw dai
     }
 
-    // Calculate Pie, Claim DCP savings accrued, and Withdraw Dai to Vat.dai balance
-    function calcClaimAndWithdrawToVat(address split_, address usr, uint start, uint end, uint wad) public {
-        uint pie = rdiv(wad, SplitDSRLike(split_).snapshot());  // Calculate Pie
-        claimAndWithdraw(split_, usr, start, end, pie);
-    }
-
-    // Calculate Pie, Claim DCP savings accrued, and Withdraw Dai to ERC20 Dai balance
-    function calcClaimAndWithdrawToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint wad) public {
-        calcClaimAndWithdrawToVat(split_, usr, start, end, wad);
+    // Claim DCP savings accrued, and Withdraw Dai to ERC20 Dai balance
+    function claimAndWithdrawToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint pie) public {
+        claimAndWithdrawToVat(split_, usr, start, end, pie);
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
-    // Calculate Pie, Claim DCP savings accrued, and Withdraw Dai to DSR Pie balance of DSProxy contract
-    function calcClaimAndWithdrawToDSR(address split_, address pot_, address usr, uint start, uint end, uint wad) public {
-        calcClaimAndWithdrawToVat(split_, usr, start, end, wad);
+    // Claim DCP savings accrued, and Withdraw Dai to DSR Pie balance of DSProxy contract
+    function claimAndWithdrawToDSR(address split_, address pot_, address usr, uint start, uint end, uint pie) public {
+        claimAndWithdrawToVat(split_, usr, start, end, pie);
         moveAllVatDaiToDSR(pot_, usr);
     }
 
-    // Generate Dai and Issue ZCD
-    function generateDaiAndIssueZCD(
+    // Generate Dai from vault and Issue
+    function generateDaiAndIssue(
         address split_,
         address vat_,
         address jug,
@@ -258,7 +252,7 @@ contract SplitDSRProxyActions is Common {
         split.issue(usr, end, pie);
     }
 
-    // Claim and payback stability fee
+    // Claim DCP and payback stability fee of a vault
     function claimAndPaybackStabilityFee() public {
         // TODO
     }
