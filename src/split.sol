@@ -85,6 +85,9 @@ contract SplitDSR {
     mapping (uint => uint) public chi; // time => pot.chi value [ray: 27 decimal fixed point number]
     uint public totalSupply; // total ZCD supply [rad]
 
+    // dai : vat uses the rad number type to track dai balances
+    // pie : pot uses the wad number type to track pie balances
+
     event MintZCD(address indexed usr, bytes32 indexed class, uint end, uint dai);
     event BurnZCD(address indexed usr, bytes32 indexed class, uint end, uint dai);
     event MintDCP(address indexed usr, bytes32 indexed class, uint start, uint end, uint pie);

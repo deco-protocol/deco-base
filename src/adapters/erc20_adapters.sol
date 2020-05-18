@@ -41,18 +41,18 @@ contract ZCDAdapterERC20 {
         return address(token);
     }
 
-    function join(address usr, bytes32 class, uint dai) external approved(usr) {
+    function join(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
-        split.moveZCD(usr, address(this), class, dai);
-        ERC20(tokens[class]).mint(usr, dai);
+        split.moveZCD(src, address(this), class, dai); // Move ZCD from src address to adapter
+        ERC20(tokens[class]).mint(dst, dai); // Mint ZCD ERC20 tokens to dst address
     }
 
-    function exit(address usr, bytes32 class, uint dai) external approved(usr) {
+    function exit(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
-        ERC20(tokens[class]).burn(usr, dai);
-        split.moveZCD(address(this), usr, class, dai);
+        ERC20(tokens[class]).burn(src, dai); // Burn ZCD ERC20 tokens from src address
+        split.moveZCD(address(this), dst, class, dai); // Move ZCD balance from adapter to dst address
     }
 }
 
@@ -89,17 +89,17 @@ contract DCPAdapterERC20 {
         return address(token);
     }
 
-    function join(address usr, bytes32 class, uint pie) external approved(usr) {
+    function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
-        split.moveDCP(usr, address(this), class, pie);
-        ERC20(tokens[class]).mint(usr, pie);
+        split.moveDCP(src, address(this), class, pie); // Move DCP from src address to adapter
+        ERC20(tokens[class]).mint(dst, pie); // Mint DCP ERC20 tokens to dst address
     }
 
-    function exit(address usr, bytes32 class, uint pie) external approved(usr) {
+    function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
-        ERC20(tokens[class]).burn(usr, pie);
-        split.moveDCP(address(this), usr, class, pie);
+        ERC20(tokens[class]).burn(src, pie); // Burn DCP ERC20 tokens from src address
+        split.moveDCP(address(this), dst, class, pie); // Move DCP balance from adapter to dst address
     }
 }

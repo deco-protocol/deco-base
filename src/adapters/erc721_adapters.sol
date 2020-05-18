@@ -94,19 +94,19 @@ contract ZCDAdapterERC721 {
         _;
     }
 
-    function join(address usr, bytes32 class, uint dai) external approved(usr) {
-        split.moveZCD(usr, address(this), class, dai);
-        zcdnft.mint(usr, class, dai);
+    function join(address src, address dst, bytes32 class, uint dai) external approved(src) {
+        split.moveZCD(src, address(this), class, dai); // Move ZCD from src address to adapter
+        zcdnft.mint(dst, class, dai); // Mint ZCD ERC721 token to dst address
     }
 
-    function exit(address usr, uint tokenId_) external approved(usr) {
-        require(usr == zcdnft.ownerOf(tokenId_));
+    function exit(address src, address dst, uint tokenId_) external approved(src) {
+        require(src == zcdnft.ownerOf(tokenId_));
 
         bytes32 class = zcdnft.class(tokenId_);
         uint dai = zcdnft.amount(tokenId_);
 
-        zcdnft.burn(tokenId_);
-        split.moveZCD(address(this), usr, class, dai);
+        zcdnft.burn(tokenId_); // Burn ZCD ERC721 from src address
+        split.moveZCD(address(this), dst, class, dai); // Move ZCD balance from adapter to dst address
     }
 }
 
@@ -128,18 +128,18 @@ contract DCPAdapterERC721 {
         _;
     }
 
-    function join(address usr, bytes32 class, uint pie) external approved(usr) {
-        split.moveDCP(usr, address(this), class, pie);
-        dcpnft.mint(usr, class, pie);
+    function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
+        split.moveDCP(src, address(this), class, pie); // Move DCP from src address to adapter
+        dcpnft.mint(dst, class, pie);  // Mint DCP ERC721 token to dst address
     }
 
-    function exit(address usr, uint tokenId_) external approved(usr) {
-        require(usr == dcpnft.ownerOf(tokenId_));
+    function exit(address src, address dst, uint tokenId_) external approved(src) {
+        require(src == dcpnft.ownerOf(tokenId_));
 
         bytes32 class = dcpnft.class(tokenId_);
         uint pie = dcpnft.amount(tokenId_);
 
-        dcpnft.burn(tokenId_);
-        split.moveDCP(address(this), usr, class, pie);
+        dcpnft.burn(tokenId_); // Burn DCP ERC721 from src address
+        split.moveDCP(address(this), dst, class, pie); // Move DCP balance from adapter to dst address
     }
 }
