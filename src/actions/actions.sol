@@ -181,7 +181,11 @@ contract SplitDSRProxyActions is Common {
         SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
     }
 
-    // Redeem doesn't need a proxy action to calculate pie input since it takes wad
+    // Redeem without claiming savings
+    function redeemNow(address split_, address usr, uint end, uint dai) public {
+        SplitDSRLike(split_).snapshot();
+        SplitDSRLike(split_).redeem(usr, end, now, dai); // Redeem ZCD after maturity to Vat.dai balance
+    }
 
     // Redeem ZCD to ERC20 Dai balance of usr
     function redeemToERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint dai) public {
