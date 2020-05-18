@@ -122,38 +122,38 @@ contract ERC20AdapterTest is DSTest {
         assertEq(token, zcdAdapter.tokens(class));
     }
 
-    function test_erc20_zcd_join() public {
+    function test_erc20_zcd_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
         address token = zcdAdapter.deployToken(class);
 
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.join(self, self, class, balance);
+        zcdAdapter.exit(self, self, class, balance);
 
         assertEq(split.zcd(self,class), 0);
         assertEq(ERC20(token).balanceOf(self), balance);
     }
 
-    function testFail_erc20_zcd_join() public {
+    function testFail_erc20_zcd_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
         assertEq(zcdAdapter.tokens(class), address(0));
 
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.join(self, self, class, balance);
+        zcdAdapter.exit(self, self, class, balance);
     }
 
-    function test_erc20_zcd_exit() public {
+    function test_erc20_zcd_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
         address token = zcdAdapter.deployToken(class);
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
-        zcdAdapter.join(self, self, class, balance);
+        zcdAdapter.exit(self, self, class, balance);
 
         ERC20(token).approve(address(zcdAdapter), uint(-1));
-        zcdAdapter.exit(self, self, class, rad(1 ether));
+        zcdAdapter.join(self, self, class, rad(1 ether));
 
         assertEq(split.zcd(self,class), rad(1 ether));
         assertEq(ERC20(token).balanceOf(self), balance - rad(1 ether));
@@ -166,38 +166,38 @@ contract ERC20AdapterTest is DSTest {
         assertEq(token, dcpAdapter.tokens(class));
     }
 
-    function test_erc20_dcp_join() public {
+    function test_erc20_dcp_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
         address token = dcpAdapter.deployToken(class);
 
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
 
-        dcpAdapter.join(self, self, class, balance);
+        dcpAdapter.exit(self, self, class, balance);
 
         assertEq(split.dcp(self,class), 0);
         assertEq(ERC20(token).balanceOf(self), balance);
     }
 
-    function testFail_erc20_dcp_join() public {
+    function testFail_erc20_dcp_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
         assertEq(dcpAdapter.tokens(class), address(0));
 
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
 
-        dcpAdapter.join(self, self, class, balance);
+        dcpAdapter.exit(self, self, class, balance);
     }
 
-    function test_erc20_dcp_exit() public {
+    function test_erc20_dcp_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
         address token = dcpAdapter.deployToken(class);
         uint balance = split.dcp(self, class);
         split.approve(address(dcpAdapter), true);
-        dcpAdapter.join(self, self, class, balance);
+        dcpAdapter.exit(self, self, class, balance);
 
         ERC20(token).approve(address(dcpAdapter), uint(-1));
-        dcpAdapter.exit(self, self, class, 1 ether);
+        dcpAdapter.join(self, self, class, 1 ether);
 
         assertEq(split.dcp(self,class), 1 ether);
         assertEq(ERC20(token).balanceOf(self), balance - 1 ether);

@@ -120,7 +120,7 @@ contract ERC20 is LibNote {
         totalSupply    = add(totalSupply, val);
         emit Transfer(address(0), usr, val);
     }
-    function burn(address usr, uint val) external auth {
+    function burn(address usr, uint val) external {
         require(balanceOf[usr] >= val, "insufficient-balance");
         if (usr != msg.sender && allowance[usr][msg.sender] != uint(-1)) {
             require(allowance[usr][msg.sender] >= val, "insufficient-allowance");

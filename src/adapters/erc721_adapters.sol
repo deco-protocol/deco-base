@@ -94,12 +94,12 @@ contract ZCDAdapterERC721 {
         _;
     }
 
-    function join(address src, address dst, bytes32 class, uint dai) external approved(src) {
+    function exit(address src, address dst, bytes32 class, uint dai) external approved(src) {
         split.moveZCD(src, address(this), class, dai); // Move ZCD from src address to adapter
         zcdnft.mint(dst, class, dai); // Mint ZCD ERC721 token to dst address
     }
 
-    function exit(address src, address dst, uint tokenId_) external approved(src) {
+    function join(address src, address dst, uint tokenId_) external approved(src) {
         require(src == zcdnft.ownerOf(tokenId_));
 
         bytes32 class = zcdnft.class(tokenId_);
@@ -128,12 +128,12 @@ contract DCPAdapterERC721 {
         _;
     }
 
-    function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
+    function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
         split.moveDCP(src, address(this), class, pie); // Move DCP from src address to adapter
         dcpnft.mint(dst, class, pie);  // Mint DCP ERC721 token to dst address
     }
 
-    function exit(address src, address dst, uint tokenId_) external approved(src) {
+    function join(address src, address dst, uint tokenId_) external approved(src) {
         require(src == dcpnft.ownerOf(tokenId_));
 
         bytes32 class = dcpnft.class(tokenId_);

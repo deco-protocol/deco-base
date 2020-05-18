@@ -73,15 +73,15 @@ contract DaiJoinLike {
 }
 
 contract AdapterLike {
-    function join(address, address, bytes32, uint) external;
-}
-
-contract ERC20AdapterLike {
     function exit(address, address, bytes32, uint) external;
 }
 
+contract ERC20AdapterLike {
+    function join(address, address, bytes32, uint) external;
+}
+
 contract ERC721AdapterLike {
-    function exit(address, address, uint) external;
+    function join(address, address, uint) external;
 }
 
 contract Common {
@@ -250,18 +250,18 @@ contract SplitDSRProxyActions is Common {
         moveAllVatDaiToDSR(pot_, usr);
     }
 
-    // Join ZCD balance to ERC20 or ERC721 tokens using their adapters
-    function joinZCD(address split_, address adapter_, address usr, bytes32 class, uint dai) public {
+    // Exit ZCD balance to ERC20 or ERC721 tokens using their adapters
+    function exitZCD(address split_, address adapter_, address usr, bytes32 class, uint dai) public {
         SplitDSRLike(split_).moveZCD(usr, address(this), class, dai);
         SplitDSRLike(split_).approve(adapter_, true);
-        AdapterLike(adapter_).join(address(this), usr, class, dai);
+        AdapterLike(adapter_).exit(address(this), usr, class, dai);
     }
 
-    // Join DCP balance to ERC20 or ERC721 tokens using their adapters
-    function joinDCP(address split_, address adapter_, address usr, bytes32 class, uint pie) public {
+    // Exit DCP balance to ERC20 or ERC721 tokens using their adapters
+    function exitDCP(address split_, address adapter_, address usr, bytes32 class, uint pie) public {
         SplitDSRLike(split_).moveDCP(usr, address(this), class, pie);
         SplitDSRLike(split_).approve(adapter_, true);
-        AdapterLike(adapter_).join(address(this), usr, class, pie);
+        AdapterLike(adapter_).exit(address(this), usr, class, pie);
     }
 
     // Generate Dai from vault and Issue
