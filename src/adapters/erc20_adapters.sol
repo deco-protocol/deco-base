@@ -1,6 +1,7 @@
 pragma solidity 0.5.12;
 
 import "./erc20.sol";
+import "./strings.sol";
 
 contract SplitDSRLike {
     function approvals(address, address) external returns (bool);
@@ -9,6 +10,8 @@ contract SplitDSRLike {
 }
 
 contract ZCDAdapterERC20 {
+    using Strings for uint;
+
     SplitDSRLike split;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
@@ -38,10 +41,11 @@ contract ZCDAdapterERC20 {
     }
 
     // Deploy an ERC20 token contract for a ZCD class
-    function deployToken(bytes32 class) public returns (address) {
+    function deployToken(uint end) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(end));
         require(address(tokens[class]) == address(0), "zcd/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(class)), "ZCD", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(end.toString())), "ZCD", "1", 18);
         tokens[class] = address(token);
 
         emit NewZCDToken(class, address(token));
@@ -73,6 +77,8 @@ contract ZCDAdapterERC20 {
 }
 
 contract DCCAdapterERC20 {
+    using Strings for uint;
+
     SplitDSRLike split;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
@@ -93,11 +99,25 @@ contract DCCAdapterERC20 {
         _;
     }
 
-    // Deploy an ERC20 token contract for a DCC/FutureDCC class
-    function deployToken(bytes32 class) public returns (address) {
+    // Deploy an ERC20 token contract for a DCC class
+    function deployToken(uint start, uint end) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(start, end));
         require(address(tokens[class]) == address(0), "dcc/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(class)), "DCC", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(start.toString(), " ", end.toString())), "DCC", "1", 18);
+        tokens[class] = address(token);
+
+        emit NewDCCToken(class, address(token));
+
+        return address(token);
+    }
+
+    // Deploy an ERC20 token contract for a FutureDCC class
+    function deployToken(uint start, uint slice, uint end) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(start, slice, end));
+        require(address(tokens[class]) == address(0), "dcc/token-exists");
+
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(start.toString(), " ", slice.toString(), " ", end.toString())), "DCC", "1", 18);
         tokens[class] = address(token);
 
         emit NewDCCToken(class, address(token));

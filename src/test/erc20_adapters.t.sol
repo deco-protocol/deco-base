@@ -118,13 +118,13 @@ contract ERC20AdapterTest is DSTest {
     function test_deploy_zcdtoken() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
 
-        address token = zcdAdapter.deployToken(class);
+        address token = zcdAdapter.deployToken(day(10));
         assertEq(token, zcdAdapter.tokens(class));
     }
 
     function test_erc20_zcd_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
-        address token = zcdAdapter.deployToken(class);
+        address token = zcdAdapter.deployToken(day(10));
 
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
@@ -149,7 +149,7 @@ contract ERC20AdapterTest is DSTest {
 
     function test_erc20_zcd_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(10)));
-        address token = zcdAdapter.deployToken(class);
+        address token = zcdAdapter.deployToken(day(10));
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
@@ -166,13 +166,13 @@ contract ERC20AdapterTest is DSTest {
     function test_deploy_dcctoken() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
 
-        address token = dccAdapter.deployToken(class);
+        address token = dccAdapter.deployToken(day(1), day(10));
         assertEq(token, dccAdapter.tokens(class));
     }
 
     function test_erc20_dcc_exit() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
-        address token = dccAdapter.deployToken(class);
+        address token = dccAdapter.deployToken(day(1), day(10));
 
         uint balance = split.dcc(self, class);
         split.approve(address(dccAdapter), true);
@@ -195,7 +195,7 @@ contract ERC20AdapterTest is DSTest {
 
     function test_erc20_dcc_join() public {
         bytes32 class = keccak256(abi.encodePacked(day(1), day(10)));
-        address token = dccAdapter.deployToken(class);
+        address token = dccAdapter.deployToken(day(1), day(10));
         uint balance = split.dcc(self, class);
         split.approve(address(dccAdapter), true);
         dccAdapter.exit(self, self, class, balance);
