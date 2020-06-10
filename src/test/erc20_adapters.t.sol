@@ -129,10 +129,11 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.exit(self, self, class, balance);
+        uint dai = wad(balance);
+        zcdAdapter.exit(self, self, class, dai);
 
-        assertEq(split.zcd(self,class), 0);
-        assertEq(ERC20(token).balanceOf(self), balance);
+        assertEq(wad(split.zcd(self,class)), 0);
+        assertEq(ERC20(token).balanceOf(self), dai);
     }
 
     function testFail_erc20_zcd_exit() public {
@@ -142,7 +143,8 @@ contract ERC20AdapterTest is DSTest {
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
 
-        zcdAdapter.exit(self, self, class, balance);
+        uint dai = wad(balance);
+        zcdAdapter.exit(self, self, class, dai);
     }
 
     function test_erc20_zcd_join() public {
@@ -150,13 +152,15 @@ contract ERC20AdapterTest is DSTest {
         address token = zcdAdapter.deployToken(class);
         uint balance = split.zcd(self, class);
         split.approve(address(zcdAdapter), true);
-        zcdAdapter.exit(self, self, class, balance);
+
+        uint dai = wad(balance);
+        zcdAdapter.exit(self, self, class, dai);
 
         ERC20(token).approve(address(zcdAdapter), uint(-1));
-        zcdAdapter.join(self, self, class, rad(1 ether));
+        zcdAdapter.join(self, self, class, 1 ether);
 
-        assertEq(split.zcd(self,class), rad(1 ether));
-        assertEq(ERC20(token).balanceOf(self), balance - rad(1 ether));
+        assertEq(wad(split.zcd(self,class)), 1 ether);
+        assertEq(ERC20(token).balanceOf(self), dai - (1 ether));
     }
 
     function test_deploy_dcptoken() public {

@@ -24,6 +24,14 @@ contract ZCDAdapterERC20 {
         assembly{ z := or(x, y)}
     }
 
+    function mul(uint x, uint y) internal pure returns (uint z) {
+        require(y == 0 || (z = x * y) / y == x, "mul-overflow");
+    }
+
+    function toRad(uint wad) internal pure returns (uint rad) {
+        rad = mul(wad, 10 ** 27);
+    }
+
     modifier approved(address usr) {
         require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
         _;
@@ -33,7 +41,7 @@ contract ZCDAdapterERC20 {
     function deployToken(bytes32 class) public returns (address) {
         require(address(tokens[class]) == address(0), "zcd/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked("ZCD ", class)), "ZCD", "1", 45);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked("ZCD ", class)), "ZCD", "1", 18);
         tokens[class] = address(token);
 
         emit NewZCDToken(class, address(token));
@@ -41,18 +49,26 @@ contract ZCDAdapterERC20 {
         return address(token);
     }
 
+    // Exit user's Split ZCD balance to its deployed ZCD ERC20 token
+    // * User transfers ZCD balance to adapter
+    // * User receives ZCD ERC20 balance
+    // * Please note that `dai` in input is a wad number type with 18 decimals unlike Split ZCD
     function exit(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
-        split.moveZCD(src, address(this), class, dai); // Move ZCD from src address to adapter
+        split.moveZCD(src, address(this), class, toRad(dai)); // Move ZCD from src address to adapter
         ERC20(tokens[class]).mint(dst, dai); // Mint ZCD ERC20 tokens to dst address
     }
 
+    // Join user's ZCD ERC20 token balance to Split
+    // * User transfers ZCD ERC20 balance to adapter
+    // * User receives ZCD balance in Split
+    // * Please note that `dai` in input is a wad number type with 18 decimals unlike Split ZCD
     function join(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
 
         ERC20(tokens[class]).burn(src, dai); // Burn ZCD ERC20 tokens from src address
-        split.moveZCD(address(this), dst, class, dai); // Move ZCD balance from adapter to dst address
+        split.moveZCD(address(this), dst, class, toRad(dai)); // Move ZCD balance from adapter to dst address
     }
 }
 
@@ -89,6 +105,9 @@ contract DCPAdapterERC20 {
         return address(token);
     }
 
+    // Exit user's Split DCP/FutureDCP balance to its deployed DCP ERC20 token
+    // * User transfers DCP balance to adapter
+    // * User receives DCP ERC20 balance
     function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
@@ -96,6 +115,9 @@ contract DCPAdapterERC20 {
         ERC20(tokens[class]).mint(dst, pie); // Mint DCP ERC20 tokens to dst address
     }
 
+    // Join user's DCP/FutureDCP ERC20 token balance to Split
+    // * User transfers DCP ERC20 balance to adapter
+    // * User receives DCP balance in Split
     function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
 
