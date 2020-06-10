@@ -27,7 +27,7 @@ contract ValueDSRLike {
     function split() public returns (address);
     function initialized() public returns (bool);
     function zcd(uint,uint) public returns (uint);
-    function dcp(uint,uint) public returns (uint);
+    function dcc(uint,uint) public returns (uint);
 }
 
 contract SplitDSRLike {
@@ -36,13 +36,13 @@ contract SplitDSRLike {
     function value() public returns (ValueDSRLike);
     function last() public returns (uint);
     function zcd(address, bytes32) external returns (uint);
-    function dcp(address, bytes32) external returns (uint);
+    function dcc(address, bytes32) external returns (uint);
     function chi(uint, uint) external returns (uint);
     function totalSupply() external returns (uint);
     function approvals(address, address) external returns (bool);
     function approve(address, bool) external;
     function moveZCD(address, address, bytes32, uint) external;
-    function moveDCP(address, address, bytes32, uint) external;
+    function moveDCC(address, address, bytes32, uint) external;
     function snapshot() public returns (uint);
     function issue(address, uint, uint) external;
     function redeem(address, uint, uint, uint) external;
@@ -56,8 +56,8 @@ contract SplitDSRLike {
     function convert(address, uint, uint, uint, uint, uint) external;
     function cage() external;
     function cashZCD(address, uint, uint) external;
-    function cashDCP(address, uint, uint) external;
-    function cashFutureDCP(address, uint, uint, uint, uint) external;
+    function cashDCC(address, uint, uint) external;
+    function cashFutureDCC(address, uint, uint, uint, uint) external;
 }
 
 contract DaiLike {
@@ -143,42 +143,42 @@ contract SplitDSRProxyActions is Common {
         PotLike(pot_).join(pie); // (pie * chi) could be slightly lower than bal because division in previous step rounds down
     }
 
-    // Calculate Pie value from dai amount and Issue ZCD & DCP using Vat.dai balance of usr
+    // Calculate Pie value from dai amount and Issue ZCD & DCC using Vat.dai balance of usr
     function calcAndIssueNowFromVat(address split_, address usr, uint end, uint dai) public {
         uint pie = rdiv(dai, SplitDSRLike(split_).snapshot()); // Calculate Pie
-        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCC
     }
 
-    // Calculate Pie value from dai amount and Issue ZCD & DCP using ERC20 Dai balance of usr
+    // Calculate Pie value from dai amount and Issue ZCD & DCC using ERC20 Dai balance of usr
     function calcAndIssueNowFromERC20(address split_, address daiJoin_, address usr, uint end, uint dai) public {
         moveERC20DaiToVat(daiJoin_, usr, dai); // Get Vat.dai balance
-        calcAndIssueNowFromVat(split_, usr, end, dai); // Issue ZCD & DCP using Vat.dai balance
+        calcAndIssueNowFromVat(split_, usr, end, dai); // Issue ZCD & DCC using Vat.dai balance
     }
 
-    // Issue ZCD & DCP using DSR pie balance of DSProxy
+    // Issue ZCD & DCC using DSR pie balance of DSProxy
     function issueNowFromDSR(address split_, address pot_, address usr, uint end, uint pie) public {
         PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
-        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP using Vat.dai balance
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCC using Vat.dai balance
     }
 
-    // Calculate Pie value from dai amount and Issue ZCD & DCP valid from a past chi snapshot using Vat.dai balance of usr
+    // Calculate Pie value from dai amount and Issue ZCD & DCC valid from a past chi snapshot using Vat.dai balance of usr
     function calcAndIssuePastFromVat(address split_, address usr, uint end, uint time, uint dai) public {
         uint pie = rdiv(dai, SplitDSRLike(split_).snapshot()); // Calculate Pie
-        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
-        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCC at current timestamp first
+        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCC to past snapshot
     }
 
-    // Calculate Pie value from dai amount and Issue ZCD & DCP valid from a past chi snapshot using ERC20 Dai balance of usr
+    // Calculate Pie value from dai amount and Issue ZCD & DCC valid from a past chi snapshot using ERC20 Dai balance of usr
     function calcAndIssuePastFromERC20(address split_, address daiJoin_, address usr, uint end, uint time, uint dai) public {
         moveERC20DaiToVat(daiJoin_, usr, dai); // Get Vat.dai balance
-        calcAndIssuePastFromVat(split_, usr, end, time, dai); // Issue ZCD & DCP using Vat.dai balance at past chi snapshot
+        calcAndIssuePastFromVat(split_, usr, end, time, dai); // Issue ZCD & DCC using Vat.dai balance at past chi snapshot
     }
 
-    // Issue ZCD & DCP using DSR pie balance of DSProxy valid from a past chi snapshot
+    // Issue ZCD & DCC using DSR pie balance of DSProxy valid from a past chi snapshot
     function issuePastFromDSR(address split_, address pot_, address usr, uint end, uint time, uint pie) public {
         PotLike(pot_).exit(pie); // Exit pie balance to Vat.dai
-        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCP at current timestamp first
-        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCP to past snapshot
+        SplitDSRLike(split_).issue(usr, end, pie); // Issue ZCD & DCC at current timestamp first
+        SplitDSRLike(split_).rewind(usr, now, end, time, pie); // Rewind DCC to past snapshot
     }
 
     // Redeem without claiming savings
@@ -199,52 +199,52 @@ contract SplitDSRProxyActions is Common {
         moveAllVatDaiToDSR(pot_, usr); // Move all Vat.dai balance to DSProxy's Pot balance
     }
 
-    // Claim DCP savings accrued until now and before expiry to Vat.dai balance
+    // Claim DCC savings accrued until now and before expiry to Vat.dai balance
     function claimNowToVat(address split_, address usr, uint start, uint end, uint pie) public {
         SplitDSRLike(split_).claim(usr, start, end, now, pie); // Execute claim at time now. Snapshot for now need not exist and will be captured internally
     }
 
-    // Claim DCP savings accrued until now and before expiry to ERC20 Dai balance
+    // Claim DCC savings accrued until now and before expiry to ERC20 Dai balance
     function claimNowToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint pie) public {
         claimNowToVat(split_, usr, start, end, pie);
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
-    // Claim DCP savings accrued until now and before expiry to DSR Pie balance of DSProxy contract
+    // Claim DCC savings accrued until now and before expiry to DSR Pie balance of DSProxy contract
     function claimNowToDSR(address split_, address pot_, address usr, uint start, uint end, uint pie) public {
         claimNowToVat(split_, usr, start, end, pie);
         moveAllVatDaiToDSR(pot_, usr);
     }
 
-    // Claim DCP savings at Time to Vat.dai balance is the default for claim() in split.sol
+    // Claim DCC savings at Time to Vat.dai balance is the default for claim() in split.sol
 
-    // Claim DCP savings at Snapshot time to ERC20 Dai balance
+    // Claim DCC savings at Snapshot time to ERC20 Dai balance
     function claimAtTimeToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint time, uint pie) public {
         SplitDSRLike(split_).claim(usr, start, end, time, pie); // Snapshot at time needs to exist
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
-    // Claim DCP savings at Snapshot time to DSR Pie balance of DSProxy contract
+    // Claim DCC savings at Snapshot time to DSR Pie balance of DSProxy contract
     function claimAtTimeToDSR(address split_, address pot_, address usr, uint start, uint end, uint time, uint pie) public {
         SplitDSRLike(split_).claim(usr, start, end, time, pie);
         moveAllVatDaiToDSR(pot_, usr);
     }
 
-    // Claim DCP savings accrued and Withdraw Dai to Vat.dai balance
+    // Claim DCC savings accrued and Withdraw Dai to Vat.dai balance
     function claimAndWithdrawToVat(address split_, address usr, uint start, uint end, uint pie) public {
         SplitDSRLike(split_).claim(usr, start, end, now, pie); // Withdraw cannot be executed until all savings are claimed until now
         bytes32 class = keccak256(abi.encodePacked(now, end));
-        uint withdrawPie = SplitDSRLike(split_).dcp(usr, class);
-        SplitDSRLike(split_).withdraw(usr, end, withdrawPie); // Merge ZCD and DCP before expiry to withdraw dai
+        uint withdrawPie = SplitDSRLike(split_).dcc(usr, class);
+        SplitDSRLike(split_).withdraw(usr, end, withdrawPie); // Merge ZCD and DCC before expiry to withdraw dai
     }
 
-    // Claim DCP savings accrued, and Withdraw Dai to ERC20 Dai balance
+    // Claim DCC savings accrued, and Withdraw Dai to ERC20 Dai balance
     function claimAndWithdrawToERC20(address split_, address daiJoin_, address usr, uint start, uint end, uint pie) public {
         claimAndWithdrawToVat(split_, usr, start, end, pie);
         moveAllVatDaiToERC20(daiJoin_, usr);
     }
 
-    // Claim DCP savings accrued, and Withdraw Dai to DSR Pie balance of DSProxy contract
+    // Claim DCC savings accrued, and Withdraw Dai to DSR Pie balance of DSProxy contract
     function claimAndWithdrawToDSR(address split_, address pot_, address usr, uint start, uint end, uint pie) public {
         claimAndWithdrawToVat(split_, usr, start, end, pie);
         moveAllVatDaiToDSR(pot_, usr);
@@ -257,9 +257,9 @@ contract SplitDSRProxyActions is Common {
         AdapterLike(adapter_).exit(address(this), usr, class, dai);
     }
 
-    // Exit DCP balance to ERC20 or ERC721 tokens using their adapters
-    function exitDCP(address split_, address adapter_, address usr, bytes32 class, uint pie) public {
-        SplitDSRLike(split_).moveDCP(usr, address(this), class, pie);
+    // Exit DCC balance to ERC20 or ERC721 tokens using their adapters
+    function exitDCC(address split_, address adapter_, address usr, bytes32 class, uint pie) public {
+        SplitDSRLike(split_).moveDCC(usr, address(this), class, pie);
         SplitDSRLike(split_).approve(adapter_, true);
         AdapterLike(adapter_).exit(address(this), usr, class, pie);
     }
@@ -283,7 +283,7 @@ contract SplitDSRProxyActions is Common {
         split.issue(usr, end, pie);
     }
 
-    // Claim DCP and payback stability fee of a vault
+    // Claim DCC and payback stability fee of a vault
     function claimAndPaybackStabilityFee() public {
         // TODO
     }

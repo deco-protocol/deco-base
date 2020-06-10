@@ -27,7 +27,7 @@ contract ValueDSR {
     bool public initialized; // ValueDSR initialization flag
     uint public last; // Last timestamp synchronized from SplitDSR
 
-    mapping (uint => uint) public ratio; // end timestamp => dcp balance cashout ratio [ray]
+    mapping (uint => uint) public ratio; // end timestamp => dcc balance cashout ratio [ray]
 
     constructor() public {
         initialized = false;
@@ -58,14 +58,14 @@ contract ValueDSR {
         last = split.last();
     }
 
-    // Calculate cashout ratio to split dai between ZCD and DCP at each end timestamp
+    // Calculate cashout ratio to split dai between ZCD and DCC at each end timestamp
     function calculate(uint end) public validEnd(end) returns (uint ratio_) {
         ratio_ = mul(15, 10**24); // 0.015
-        ratio[end] = ratio_; // All ZCD valued at 0.985 Dai and DCP valued at 0.015 Dai irrespective of end timestamp
+        ratio[end] = ratio_; // All ZCD valued at 0.985 Dai and DCC valued at 0.015 Dai irrespective of end timestamp
 
         // TODO
         // Implement a proper valuation methodology to compute a better ratio considering
-        // their end timestamp and give both zcd and dcp holders a fair dai amount back
+        // their end timestamp and give both zcd and dcc holders a fair dai amount back
     }
 
     // Value of ZCD balance with end timestamp
@@ -74,8 +74,8 @@ contract ValueDSR {
         return rmul(dai, sub(ONE, ratio[end]));
     }
 
-    // Value of DCP balance with last and end timestamp
-    function dcp(uint end, uint dai) public view validEnd(end) returns (uint) {
+    // Value of DCC balance with last and end timestamp
+    function dcc(uint end, uint dai) public view validEnd(end) returns (uint) {
         require(ratio[end] != 0); // cashout ratio for end required
         return rmul(dai, ratio[end]);
     }

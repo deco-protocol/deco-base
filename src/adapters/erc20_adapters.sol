@@ -5,7 +5,7 @@ import "./erc20.sol";
 contract SplitDSRLike {
     function approvals(address, address) external returns (bool);
     function moveZCD(address, address, bytes32, uint) external;
-    function moveDCP(address, address, bytes32, uint) external;
+    function moveDCC(address, address, bytes32, uint) external;
 }
 
 contract ZCDAdapterERC20 {
@@ -72,12 +72,12 @@ contract ZCDAdapterERC20 {
     }
 }
 
-contract DCPAdapterERC20 {
+contract DCCAdapterERC20 {
     SplitDSRLike split;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
-    event NewDCPToken(bytes32 indexed class, address token);
+    event NewDCCToken(bytes32 indexed class, address token);
 
     constructor(uint256 chainId_, address splitdsr_) public {
         chainId = chainId_;
@@ -93,35 +93,35 @@ contract DCPAdapterERC20 {
         _;
     }
 
-    // Deploy an ERC20 token contract for a DCP/FutureDCP class
+    // Deploy an ERC20 token contract for a DCC/FutureDCC class
     function deployToken(bytes32 class) public returns (address) {
-        require(address(tokens[class]) == address(0), "dcp/token-exists");
+        require(address(tokens[class]) == address(0), "dcc/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(class)), "DCP", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(class)), "DCC", "1", 18);
         tokens[class] = address(token);
 
-        emit NewDCPToken(class, address(token));
+        emit NewDCCToken(class, address(token));
 
         return address(token);
     }
 
-    // Exit user's Split DCP/FutureDCP balance to its deployed DCP ERC20 token
-    // * User transfers DCP balance to adapter
-    // * User receives DCP ERC20 balance
+    // Exit user's Split DCC/FutureDCC balance to its deployed DCC ERC20 token
+    // * User transfers DCC balance to adapter
+    // * User receives DCC ERC20 balance
     function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
-        require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
+        require(address(tokens[class]) != address(0), "dcc/token-not-deployed");
 
-        split.moveDCP(src, address(this), class, pie); // Move DCP from src address to adapter
-        ERC20(tokens[class]).mint(dst, pie); // Mint DCP ERC20 tokens to dst address
+        split.moveDCC(src, address(this), class, pie); // Move DCC from src address to adapter
+        ERC20(tokens[class]).mint(dst, pie); // Mint DCC ERC20 tokens to dst address
     }
 
-    // Join user's DCP/FutureDCP ERC20 token balance to Split
-    // * User transfers DCP ERC20 balance to adapter
-    // * User receives DCP balance in Split
+    // Join user's DCC/FutureDCC ERC20 token balance to Split
+    // * User transfers DCC ERC20 balance to adapter
+    // * User receives DCC balance in Split
     function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
-        require(address(tokens[class]) != address(0), "dcp/token-not-deployed");
+        require(address(tokens[class]) != address(0), "dcc/token-not-deployed");
 
-        ERC20(tokens[class]).burn(src, pie); // Burn DCP ERC20 tokens from src address
-        split.moveDCP(address(this), dst, class, pie); // Move DCP balance from adapter to dst address
+        ERC20(tokens[class]).burn(src, pie); // Burn DCC ERC20 tokens from src address
+        split.moveDCC(address(this), dst, class, pie); // Move DCC balance from adapter to dst address
     }
 }

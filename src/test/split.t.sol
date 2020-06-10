@@ -103,16 +103,16 @@ contract SplitDSRTest is DSTest {
         hevm.warp(day(1));
     }
 
-    function test_issue_zcd_and_dcp() public {
+    function test_issue_zcd_and_dcc() public {
         uint val = rdiv(10 ether, pot.drip());
 
         split.issue(self, day(2), val);
 
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
-        bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
+        bytes32 dccClass = keccak256(abi.encodePacked(day(1), day(2)));
 
         assertEq(split.zcd(self, zcdClass), mul(val, pot.drip()));
-        assertEq(split.dcp(self, dcpClass), val);
+        assertEq(split.dcc(self, dccClass), val);
     }
 
     function test_withdraw_dai_before_expiry() public {
@@ -122,19 +122,19 @@ contract SplitDSRTest is DSTest {
         hevm.warp(day(2));
         
         bytes32 zcdClass = keccak256(abi.encodePacked(day(3)));
-        bytes32 dcpClass1 = keccak256(abi.encodePacked(day(1), day(3)));
-        bytes32 dcpClass2 = keccak256(abi.encodePacked(day(2), day(3)));
+        bytes32 dccClass1 = keccak256(abi.encodePacked(day(1), day(3)));
+        bytes32 dccClass2 = keccak256(abi.encodePacked(day(2), day(3)));
 
-        split.claim(self, day(1), day(3), now, split.dcp(self, dcpClass1));
-        split.withdraw(self, day(3), split.dcp(self, dcpClass2));
-        
-        assertEq(wad(split.zcd(self, zcdClass)), 1 wei); // dcp balance 1 wei lower after claim due to rounding
-        assertEq(split.dcp(self, dcpClass1), 0 ether);
-        assertEq(split.dcp(self, dcpClass2), 0 ether);
+        split.claim(self, day(1), day(3), now, split.dcc(self, dccClass1));
+        split.withdraw(self, day(3), split.dcc(self, dccClass2));
+
+        assertEq(wad(split.zcd(self, zcdClass)), 1 wei); // dcc balance 1 wei lower after claim due to rounding
+        assertEq(split.dcc(self, dccClass1), 0 ether);
+        assertEq(split.dcc(self, dccClass2), 0 ether);
         assertEq(wad(vat.dai(self)), wad(mul(val, pot.drip())) + 90 ether - 2 wei);
     }
 
-    function test_rewind_claim_dcp() public {
+    function test_rewind_claim_dcc() public {
         uint val = rdiv(10 ether, pot.drip());
 
         split.snapshot(); // day 1 snapshot
@@ -147,7 +147,7 @@ contract SplitDSRTest is DSTest {
         uint daibalance = wad(vat.dai(self)); //balance: 89999988705974138589
 
         split.rewind(self, day(3), day(5), day(1), val); //balance: 89999977411935521676
-        split.claim(self, day(1), day(5), now, split.dcp(self, class)); //balance: 89999988705974138589
+        split.claim(self, day(1), day(5), now, split.dcc(self, class)); //balance: 89999988705974138589
 
         assertEq(wad(vat.dai(self)), daibalance);
     }
@@ -158,7 +158,7 @@ contract SplitDSRTest is DSTest {
         split.issue(self, day(2), val);
 
         bytes32 zcdClass = keccak256(abi.encodePacked(day(2)));
-        bytes32 dcpClass = keccak256(abi.encodePacked(day(1), day(2)));
+        bytes32 dccClass = keccak256(abi.encodePacked(day(1), day(2)));
 
         hevm.warp(day(3));
         split.snapshot();
@@ -167,75 +167,75 @@ contract SplitDSRTest is DSTest {
         split.redeem(self, day(2), day(3), split.zcd(self, zcdClass));
 
         assertEq(wad(split.zcd(self, zcdClass)), 0);
-        assertEq(split.dcp(self, dcpClass), val);
+        assertEq(split.dcc(self, dccClass), val);
     }
 
-    function test_slice_convert_claim_dcp() public {
+    function test_slice_convert_claim_dcc() public {
         uint chi_1 = pot.drip();
         uint val = rdiv(10 ether, chi_1);
 
         split.issue(self, day(20), val);
 
         bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
-        assertEq(split.dcp(self, class1), val);
+        assertEq(split.dcc(self, class1), val);
 
         split.slice(self, day(1), day(5), day(20), val);
         bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
         bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
-        assertEq(split.dcp(self, class2), val);
-        assertEq(split.dcp(self, class3), val);
+        assertEq(split.dcc(self, class2), val);
+        assertEq(split.dcc(self, class3), val);
 
         hevm.warp(day(5));
-        split.claim(self, day(1), day(5), now, split.dcp(self, class2));
-        assertEq(split.dcp(self, class1), 0);
+        split.claim(self, day(1), day(5), now, split.dcc(self, class2));
+        assertEq(split.dcc(self, class1), 0);
 
         hevm.warp(day(6));
         uint chi_6 = split.snapshot();
         uint val_6 = (mul(val, chi_1) / chi_6);
-        split.convert(self, day(1), day(5), day(6), day(20), split.dcp(self, class3));
+        split.convert(self, day(1), day(5), day(6), day(20), split.dcc(self, class3));
         bytes32 class4 = keccak256(abi.encodePacked(day(6), day(20)));
-        assertEq(split.dcp(self, class4), val_6);
+        assertEq(split.dcc(self, class4), val_6);
 
         hevm.warp(day(7));
         uint chi_7 = split.snapshot();
         uint val_7 = (mul(val_6, chi_6) / chi_7);
-        split.claim(self, day(6), day(20), now, split.dcp(self, class4));
+        split.claim(self, day(6), day(20), now, split.dcc(self, class4));
         bytes32 class5 = keccak256(abi.encodePacked(day(7), day(20)));
-        assertEq(split.dcp(self, class4), 0);
-        assertEq(split.dcp(self, class5), val_7);
+        assertEq(split.dcc(self, class4), 0);
+        assertEq(split.dcc(self, class5), val_7);
     }
 
-    function test_slice_claim_merge_dcp() public {
+    function test_slice_claim_merge_dcc() public {
         uint chi_1 = pot.drip();
         uint val_1 = rdiv(10 ether, chi_1);
 
         split.issue(self, day(20), val_1);
 
         bytes32 class1 = keccak256(abi.encodePacked(day(1), day(20)));
-        assertEq(split.dcp(self, class1), val_1);
+        assertEq(split.dcc(self, class1), val_1);
 
         split.slice(self, day(1), day(5), day(20), val_1);
         bytes32 class2 = keccak256(abi.encodePacked(day(1), day(5)));
         bytes32 class3 = keccak256(abi.encodePacked(day(1), day(5), day(20)));
-        assertEq(split.dcp(self, class2), val_1);
-        assertEq(split.dcp(self, class3), val_1);
+        assertEq(split.dcc(self, class2), val_1);
+        assertEq(split.dcc(self, class3), val_1);
 
         hevm.warp(day(2));
         uint chi_2 = split.snapshot();
         uint val_2 = (mul(val_1, chi_1) / chi_2);
-        split.claim(self, day(1), day(5), now, split.dcp(self, class2));
+        split.claim(self, day(1), day(5), now, split.dcc(self, class2));
         bytes32 class4 = keccak256(abi.encodePacked(day(2), day(5)));
-        assertEq(split.dcp(self, class1), 0);
-        assertEq(split.dcp(self, class4), val_2 - 1 wei);
+        assertEq(split.dcc(self, class1), 0);
+        assertEq(split.dcc(self, class4), val_2 - 1 wei);
 
-        split.merge(self, day(1), day(2), day(5), day(20), split.dcp(self, class4));
+        split.merge(self, day(1), day(2), day(5), day(20), split.dcc(self, class4));
         bytes32 class5 = keccak256(abi.encodePacked(day(2), day(20)));
-        assertEq(split.dcp(self, class3), 2 wei);
-        assertEq(split.dcp(self, class4), 0);
-        assertEq(split.dcp(self, class5), val_2 - 1 wei);
+        assertEq(split.dcc(self, class3), 2 wei);
+        assertEq(split.dcc(self, class4), 0);
+        assertEq(split.dcc(self, class5), val_2 - 1 wei);
     }
 
-    function test_slice_merge_future_dcp() public {
+    function test_slice_merge_future_dcc() public {
         uint chi_1 = pot.drip();
         uint val = rdiv(10 ether, chi_1);
 
@@ -249,15 +249,15 @@ contract SplitDSRTest is DSTest {
         split.sliceFuture(self, day(1), day(5), day(11), day(20), val);
         bytes32 class4 = keccak256(abi.encodePacked(day(1), day(5), day(11)));
         bytes32 class5 = keccak256(abi.encodePacked(day(1), day(11), day(20)));
-        assertEq(split.dcp(self, class1), 0);
-        assertEq(split.dcp(self, class2), val);
-        assertEq(split.dcp(self, class3), 0);
-        assertEq(split.dcp(self, class4), val);
-        assertEq(split.dcp(self, class5), val);
+        assertEq(split.dcc(self, class1), 0);
+        assertEq(split.dcc(self, class2), val);
+        assertEq(split.dcc(self, class3), 0);
+        assertEq(split.dcc(self, class4), val);
+        assertEq(split.dcc(self, class5), val);
 
         split.mergeFuture(self, day(1), day(5), day(11), day(20), val);
-        assertEq(split.dcp(self, class3), val);
-        assertEq(split.dcp(self, class4), 0);
-        assertEq(split.dcp(self, class5), 0);
+        assertEq(split.dcc(self, class3), val);
+        assertEq(split.dcc(self, class4), 0);
+        assertEq(split.dcc(self, class5), 0);
     }
 }
