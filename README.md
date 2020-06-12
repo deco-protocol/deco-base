@@ -1,6 +1,6 @@
 # Split Protocol for DSR
 
-Split protocol allows users to exchange dai for two assets tied to a future maturity date- Zero Coupon Dai(ZCD) and Dai Claim Coupon(DCC). Split protocol then locks this dai in the Dai Savings Rate contract immediately and gives these guarantees to any ZCD and DCC asset holder,
+Split protocol allows users to exchange dai for two assets tied to a future maturity date- Zero Coupon Dai(ZCD) and DSR Claim Coupon(DCC). Split protocol locks this dai in the Dai Savings Rate contract immediately and gives the following guarantees to any ZCD and DCC asset holder,
 
 - ZCD owner receives the original dai deposit after the maturity date.
 - DCC owner receives the savings earnt by this dai deposit from issuance until maturity date.
@@ -64,7 +64,7 @@ export ZCDERC20=0x98043417626280A9E2Fcb9847BBd8B5cf01Bd9A9
 export DCCERC20=0x7F6c0F447fF00565ada6bd2983b3D23d1D177b2a
 export ZCDERC721=0x3Ba678ac0a42199C2171029D0918A971622eb019
 export DCCERC721=0x96897b17535252b238e4894b4891F5a10860EE0C
-export SPLITACTIONS=0x99Ac6912D86bce1030Ad8f57d2Aa97A85CC0708d
+export SPLITACTIONS=0x0B9b78F0Fa3F21C6f91c55D5Af6EF495b534E53E
 ```
 
 ## Setup

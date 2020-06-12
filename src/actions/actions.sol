@@ -103,6 +103,10 @@ contract Common {
         y = int(x);
         require(y >= 0, "int-overflow");
     }
+
+    function toRad(uint wad) internal pure returns (uint rad) {
+        rad = mul(wad, 10 ** 27);
+    }
 }
 
 contract SplitDSRProxyActions is Common {
@@ -251,8 +255,9 @@ contract SplitDSRProxyActions is Common {
     }
 
     // Exit ZCD balance to ERC20 or ERC721 tokens using their adapters
+    // Note: dai in input is a wad, 18 decimals.
     function exitZCD(address split_, address adapter_, address usr, bytes32 class, uint dai) public {
-        SplitDSRLike(split_).moveZCD(usr, address(this), class, dai);
+        SplitDSRLike(split_).moveZCD(usr, address(this), class, toRad(dai));
         SplitDSRLike(split_).approve(adapter_, true);
         AdapterLike(adapter_).exit(address(this), usr, class, dai);
     }
