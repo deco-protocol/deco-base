@@ -240,6 +240,7 @@ contract SplitDSR {
     // * User transfers ZCD balance to Split
     // * User receives dai balance equal to the ZCD balance
     // * User receives DSR earnt on this dai balance after end until redemption if a valid snapshot is present
+    // * User can input end timestamp for snap when gov has inserted a chi value to not lose any dai
     function redeem(address usr, uint end, uint snap, uint dai) external approved(usr) untilLast(end) {
         require((end <= snap) && (snap <= now)); // Redemption can happen only after end timestamp is past. Snap timestamp needs to be after end but before now.
 
@@ -260,6 +261,7 @@ contract SplitDSR {
     // * User receives dai earnt from DSR by this pie balance beween start and snap timestamps
     // * DCC balance burnt for the time period between start and snap timestamps
     // * User receives DCC balance with new class for remaining time period between snap and end timestamps
+    // * User can input end timestamp for snap when gov has inserted a chi value to not lose any dai
     function claim(address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilLast(snap) {
         require((start <= snap) && (snap <= end));
 
