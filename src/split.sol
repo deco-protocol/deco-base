@@ -208,6 +208,19 @@ contract SplitDSR {
         emit ChiSnapshot(now, chi_);
     }
 
+    // Insert a chi value at timestamp between two existing snapshots
+    function insert(uint t0, uint t1, uint t2, uint chi) public onlyGov {
+        require(t0 < t1 < t2); // snapshot set for t1 needs to be between t0 and t2
+        require(t0 >= t1 - 3 days); // t0 needs to be within 3 days of t1
+        require(t2 <= t1 + 3 days); // t2 needs to be within 3 days after t1
+
+        require(chi[t1] == 0); // timestamp should not have an existing snapshot
+        require(chi[t0] <= chi <= chi[t2]); // chi value at t1 needs to be in between chi values at t0 and t2
+
+        chi[t1] = chi; // set input chi value at t1
+        emit ChiSnapshot(t1, chi);
+    }
+
     // Issue ZCD and DCC in exchange for dai
     // * User transfers dai balance to Split
     // * User receives ZCD balance equal to the dai balance which we'll refer to as the notional amount
