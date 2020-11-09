@@ -67,11 +67,14 @@ contract SplitDSR {
 
     VatLike public vat;
     PotLike public pot;
+    address public gov; // governance contract
 
     ValueDSRLike public value; // Reports ZCD and DCC valuation to process emergency shutdown
     uint public last; // Split emergency shutdown timestamp
 
     constructor(address pot_, address value_) public {
+        gov = msg.sender;
+
         pot = PotLike(pot_);
         vat = pot.vat();
         value = ValueDSRLike(value_);
@@ -97,6 +100,12 @@ contract SplitDSR {
     event MoveZCD(address indexed src, address indexed dst, bytes32 indexed class, uint dai);
     event MoveDCC(address indexed src, address indexed dst, bytes32 indexed class, uint pie);
     event ChiSnapshot(uint time, uint chi);
+
+    // --- Governance Modifiers ---
+    modifier onlyGov() {
+        require(msg.sender == gov);
+        _;
+    }
 
     // --- Emergency Shutdown Modifiers ---
     modifier untilLast(uint time) {
@@ -167,6 +176,11 @@ contract SplitDSR {
     }
 
     // --- External and Public functions ---
+    // Update governance address
+    function updateGov(address newGov) public onlyGov {
+        gov = newGov;
+    }
+
     // Transfer ZCD balance
     function moveZCD(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(zcd[src][class] >= dai, "zcd/insufficient-balance");
