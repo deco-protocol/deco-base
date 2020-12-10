@@ -1,6 +1,7 @@
 pragma solidity 0.5.12;
 
 contract YieldLike {
+    function split() external returns (address);
     function last() external returns (uint);
     function snapshot() external returns (uint);
 
@@ -94,8 +95,9 @@ contract Split {
     }
 
     // --- Yield Adapters ---
-    function addYieldAdapter(address adapter_) public onlyGov {
-        yields[adapter_] = true;
+    function addYieldAdapter(address yield_) public onlyGov {
+        require(YieldLike(yield_).split() == address(this)); // ensure yield adapter is configured for this split deployment
+        yields[yield_] = true;
     }
 
     // --- Internal functions ---
