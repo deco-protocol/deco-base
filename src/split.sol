@@ -2,11 +2,13 @@ pragma solidity 0.5.12;
 
 contract YieldLike {
     function split() external returns (address);
-    function last() external returns (uint);
+    function canSnapshot() external returns (bool);
+    function canInsert() external returns (bool);
+    function final() external returns (uint);
     function snapshot() external returns (uint);
 
-    function lock(address usr, uint pie) external returns (uint);
-    function unlock(address usr, uint pie) external returns (uint);
+    function lock(address usr, uint chi, uint pie) external returns (uint);
+    function unlock(address usr, uint chi, uint pie) external returns (uint);
 }
 
 contract Split {
@@ -62,6 +64,7 @@ contract Split {
     mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance [rad: 45 decimal fixed point number]
     mapping (address => mapping (bytes32 => uint)) public dcc; // user address => dcc class => dcc balance [wad: 18 decimal fixed point number]
     mapping (address => mapping (uint => uint)) public chi; // yield adapter => time => pot.chi value [ray: 27 decimal fixed point number]
+    mapping (address => uint) public lastSnapshot; // yield adapter => last snapshot timestamp
     mapping (bytes32 => uint) public totalSupply; // class => zcd supply [rad]
 
     // dai : implies rad number type is being used in input
@@ -89,8 +92,8 @@ contract Split {
     }
 
     // --- Emergency Shutdown Modifiers ---
-    modifier untilLast(address yield, uint time) {
-        require(time <= YieldLike(yield).last()); // execute normally when input timestamp is before or at emergency shutdown timestamp
+    modifier untilFinal(address yield, uint time) {
+        require(time <= YieldLike(yield).final()); // execute normally when input timestamp is before or at emergency shutdown timestamp
         _;
     }
 
@@ -185,35 +188,41 @@ contract Split {
 
     // Snapshot and store updated chi value at current block timestamp
     function snapshot(address yield) public returns (uint chi_) {
+        require(YieldLike(yield).canSnapshot()); // only if yield adapter allows snapshots
         chi_ = YieldLike(yield).snapshot(); // retrive snapshot from yield adapter
         chi[yield][now] = chi_;
+
+        lastSnapshot[yield] = now; // update last snapshot timestamp
+
         emit ChiSnapshot(yield, now, chi_);
     }
 
-    // Insert a chi value at timestamp between two existing snapshots
-    function insert(address yield, uint t0, uint t1, uint t2, uint chi_) public onlyGov {
-        require(t0 < t1 && t1 < t2); // snapshot set for t1 needs to be between t0 and t2
-        require(t0 >= t1 - 3 days); // t0 needs to be within 3 days of t1
-        require(t2 <= t1 + 3 days); // t2 needs to be within 3 days after t1
+    // Insert a chi value at timestamp
+    function insert(address yield, uint t, uint chi_) public onlyGov {
+        require(YieldLike(yield).canInsert()); // only if yield adapter allows gov snapshot inserts
+        require(chi[yield][t] == 0); // timestamp should not have an existing snapshot
 
-        require(chi[yield][t1] == 0); // timestamp should not have an existing snapshot
-        require(chi[yield][t0] <= chi_ && chi_ <= chi[yield][t2]); // chi value at t1 needs to be in between chi values at t0 and t2
+        chi[yield][t] = chi_; // set input chi value at timestamp
 
-        chi[yield][t1] = chi_; // set input chi value at t1
-        emit ChiSnapshot(yield, t1, chi_);
+        // update last snapshot timestamp if insert is after current last
+        if (lastSnapshot[yield] < t) {
+            lastSnapshot[yield] = t;
+        }
+
+        emit ChiSnapshot(yield, t, chi_);
     }
 
     // Issue ZCD and DCC in exchange for dai
     // * User transfers dai balance to Split
     // * User receives ZCD balance equal to the dai balance which we'll refer to as the notional amount
     // * User receives DCC balance equal to the pie balance of the DSR deposit (pie = dai notional amount / current chi value)
-    function issue(address yield, address usr, uint end, uint pie) external approved(usr) untilLast(yield, now) {
-        require(now <= end); // Assets can only be issued with future maturity
+    function issue(address yield, address usr, uint start, uint end, uint pie) external approved(usr) untilFinal(yield, start) {
+        require(start <= now <= end); // Assets can only be issued with future maturity
 
-        uint dai = YieldLike(yield).lock(usr, pie); // transfer notional amount of balance from user to yield adapter, input is in pie terms
+        uint dai = YieldLike(yield).lock(usr, chi[yield][start], pie); // transfer notional amount of balance from user to yield adapter, input is in pie terms
 
         mintZCD(yield, usr, end, dai); // Mint ZCD balance for dai amount at end. dai is 45 decimal fixed point number.
-        mintDCC(yield, usr, now, end, pie); // Mint DCC balance for pie value between now and end timestamps. pie is 18 decimal fixed point number.
+        mintDCC(yield, usr, start, end, pie); // Mint DCC balance for pie value between now and end timestamps. pie is 18 decimal fixed point number.
     }
 
     // Redeem ZCD for dai after maturity
@@ -221,16 +230,17 @@ contract Split {
     // * User receives dai balance equal to the ZCD balance
     // * User receives DSR earnt on this dai balance after end until redemption if a valid snapshot is present
     // * User can input end timestamp for snap when gov has inserted a chi value to not lose any dai
-    function redeem(address yield, address usr, uint end, uint snap, uint dai) external approved(usr) untilLast(yield, end) {
+    function redeem(address yield, address usr, uint end, uint snap, uint dai) external approved(usr) untilFinal(yield, end) {
         require((end <= snap) && (snap <= now)); // Redemption can happen only after end timestamp is past. Snap timestamp needs to be after end but before now.
 
+        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
         uint chiSnap = chi[yield][snap]; // chi value at snap timestamp
         require(chiSnap != 0); // ensure a valid chi snapshot exists before calculating any DSR earnt
         uint pie = dai / chiSnap; // rad / ray -> wad // Calculate pie assuming user redeemed dai in the past at end timestamp and deposited it in Pot at snap timestamp
 
         burnZCD(yield, usr, end, dai); // Burn ZCD balance
 
-        YieldLike(yield).unlock(usr, pie); // transfer notional amount of balance from yield adapter to user, input is in pie terms
+        YieldLike(yield).unlock(usr, chiLast, pie); // transfer notional amount of balance from yield adapter to user, input is in pie terms
     }
 
     // Claim dai earnt by DCC balance from the Dai Savings Rate
@@ -239,10 +249,10 @@ contract Split {
     // * DCC balance burnt for the time period between start and snap timestamps
     // * User receives DCC balance with new class for remaining time period between snap and end timestamps
     // * User can input end timestamp for snap when gov has inserted a chi value to not lose any dai
-    function claim(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilLast(yield, snap) {
+    function claim(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilFinal(yield, snap) {
         require((start <= snap) && (snap <= end));
 
-        uint chiNow = YieldLike(yield).snapshot(); // current chi value
+        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
         uint chiStart = chi[yield][start]; // chi value at start timestamp
         uint chiSnap = chi[yield][snap]; // chi value at snap timestamp
 
@@ -256,19 +266,19 @@ contract Split {
         }
 
         // dai earnt by deposit as savings between two chi values is moved out. Deposit remains in Pot.
-        uint pieOut = mul(pie, sub(chiSnap, chiStart)) / chiNow; // wad * ray / ray -> wad
+        uint pieOut = mul(pie, sub(chiSnap, chiStart)) / chiLast; // wad * ray / ray -> wad
 
-        YieldLike(yield).unlock(usr, pieOut);  // Dai earnt sent to DCC owner
+        YieldLike(yield).unlock(usr, chiLast, pieOut);  // Dai earnt sent to DCC owner
     }
 
     // Rewind start timestamp of DCC balance to a past snapshot timestamp (opposite of claim which forwards start timestamp to a future snapshot)
     // * User transfers DCC balance
     // * User transfers dai balance to cover the additional savings they will be entitled to after rewind
     // * User receives DCC balance at new class with start timestamp set to an earlier chi snapshot
-    function rewind(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilLast(yield, now) {
+    function rewind(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilFinal(yield, lastSnapshot[yield]) {
         require((snap <= start) && (start <= end));
 
-        uint chiNow = YieldLike(yield).snapshot();
+        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
         uint chiSnap = chi[yield][snap];
         uint chiStart = chi[yield][start];
 
@@ -286,20 +296,21 @@ contract Split {
         mintDCC(yield, usr, snap, end, pieSnap); // Mint new DCC balance between snap and end timestamps.
 
         // Difference between new total and old notional amount at the start timestamp, in pie terms at current chi value
-        // uint pieIn = sub(total, notional) / chiNow; // (rad - rad) / ray -> wad
+        // uint pieIn = sub(total, notional) / chiLast; // (rad - rad) / ray -> wad
 
-        YieldLike(yield).lock(usr, sub(total, notional) / chiNow); // Collect dai from user for this adjustment
+        YieldLike(yield).lock(usr, chiLast, sub(total, notional) / chiLast); // Collect dai from user for this adjustment
     }
 
     // Withdraw ZCD and DCC before maturity to dai
     // * User transfers ZCD balance with an end timestamp
     // * User transfers DCC balance with savings claimed until now and the same end timestamp as ZCD
     // * User receives dai from Split equal to both their dai notional amounts
-    function withdraw(address yield, address usr, uint end, uint pie) external approved(usr) untilLast(yield, now) {
-        uint dai = YieldLike(yield).unlock(usr, pie); // transfer notional amount to user
+    function withdraw(address yield, address usr, uint end, uint pie) external approved(usr) untilFinal(yield, lastSnapshot[yield]) {
+        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
+        uint dai = YieldLike(yield).unlock(usr, chiLast, pie); // transfer notional amount to user
 
         burnZCD(yield, usr, end, dai);
-        burnDCC(yield, usr, now, end, pie); // DCC balance needs to be claimed from its start until current timestamp
+        burnDCC(yield, usr, lastSnapshot[yield], end, pie); // DCC balance needs to be claimed from its start until last timestamp
     }
 
     // Slice a DCC balance at a future timestamp into contiguous DCC and FutureDCC balances
@@ -355,7 +366,7 @@ contract Split {
     // * User transfers FutureDCC balance with t1, t2 and t4 timestamps
     // * User receives DCC balance with t3 and t4 timestamps
     // * t3 is the closest timestamp at which a chi snapshot is available after t2
-    function convert(address yield, address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) untilLast(yield, t3) {
+    function convert(address yield, address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) untilFinal(yield, t3) {
         require(t1 < t2 && t2 <= t3 && t3 < t4); // t2 can also be equal to t3 if the sliced timestamp has a chi snapshot
 
         require(chi[yield][t1] != 0); // chi value at t1 is used to calculate original dai notional amount
