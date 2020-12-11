@@ -1,10 +1,11 @@
 pragma solidity 0.5.12;
 
 interface SplitLike {
-    function vat() public returns (VatLike);
-    function gov() public returns (address);
+    function vat() external returns (address);
+    function gov() external returns (address);
 
-    function chi(address,uint) public returns (uint);
+    function chi(address,uint) external returns (uint);
+    function lastSnapshot(address) external returns (uint);
 
     function mintZCD(address yield, address usr, uint end, uint dai) external;
     function burnZCD(address yield, address usr, uint end, uint dai) external;

@@ -12,7 +12,7 @@ contract DSR is DSMath {
     bool public canSnapshot;
     bool public canInsert;
 
-    uint public final; // Final timestamp synchronized from SplitDSR
+    uint public close; // Close timestamp synchronized from SplitDSR
 
     mapping (uint => uint) public ratio; // end timestamp => dcc balance cashout ratio [ray]
 
@@ -25,7 +25,7 @@ contract DSR is DSMath {
         vat.hope(address(pot)); // Approve Pot to modify Split's Dai balance within Vat
         canSnapshot = true;
         canInsert = true;
-        final = uint(-1); // Initialized to MAX_UINT and updated after emergency shutdown is triggered on Pot
+        close = uint(-1); // Initialized to MAX_UINT and updated after emergency shutdown is triggered on Pot
     }
 
     modifier onlySplit() {
@@ -38,15 +38,15 @@ contract DSR is DSMath {
         _;
     }
 
-    modifier afterFinal(uint time) {
-        require(final < time); // processes only if input timestamp is after shutdown timestamp
+    modifier afterClose(uint time) {
+        require(close < time); // processes only if input timestamp is after shutdown timestamp
         _;
     }
 
-    // Process function only if end timestamp is greater than final
+    // Process function only if end timestamp is greater than close
     modifier validEnd(uint end) {
-        require(final < uint(-1)); // Pot needs to be caged
-        require(final < end); // End needs to be greater than final
+        require(close < uint(-1)); // Pot needs to be caged
+        require(close < end); // End needs to be greater than close
         _;
     }
 
@@ -55,7 +55,7 @@ contract DSR is DSMath {
     }
 
     function lock(address usr, uint chi, uint pie) public onlySplit returns (uint) {
-        uint dai = mul(pie, chi); // Calculate dai amount with pie input. pie is the equivalent normalized dai balance stored in Pot at current chi value: pie * chi = dai
+        uint dai = mulu(pie, chi); // Calculate dai amount with pie input. pie is the equivalent normalized dai balance stored in Pot at current chi value: pie * chi = dai
 
         vat.move(usr, address(this), dai); // Move dai from usr to Split
         pot.join(pie); // Split deposits dai into Pot
@@ -64,7 +64,7 @@ contract DSR is DSMath {
     }
 
     function unlock(address usr, uint chi, uint pie) public onlySplit returns (uint) {
-        uint dai = mul(pie, chi); // Calculate dai amount with pie input. pie is the equivalent normalized dai balance stored in Pot at current chi value: pie * chi = dai
+        uint dai = mulu(pie, chi); // Calculate dai amount with pie input. pie is the equivalent normalized dai balance stored in Pot at current chi value: pie * chi = dai
 
         pot.exit(pie); // pie removed from Pot
         vat.move(address(this), usr, dai); // Total payout to user is redeemed dai + dsr earnt from snap timestamp until now
@@ -72,17 +72,17 @@ contract DSR is DSMath {
         return dai;
     }
 
-    // Emergency Shutdown processing in ValueDSR before ZCD and DCC balances with end timestamps after final can be cashed
-    // * Anyone can execute cage() once to set final timestamp in this DSR Yield Adapter
+    // Emergency Shutdown processing in ValueDSR before ZCD and DCC balances with end timestamps after close can be cashed
+    // * Anyone can execute cage() once to set close timestamp in this DSR Yield Adapter
     // * Governance has to execute calculate for all future end timestamps and set ratio of dai payout between zcd and dcc of the maturity timestamp
 
     // Emergency Shutdown Split after Pot is caged
     function cage() external {
         require(pot.live() == 0); // Pot needs to be caged
-        require(final == uint(-1)); // final timestamp can be set only once
+        require(close == uint(-1)); // close timestamp can be set only once
 
-        snapshot(); // Snapshot is taken at final timestamp
-        final = now; // set final timestamp
+        snapshot(); // Snapshot is taken at close timestamp
+        close = now; // set close timestamp
     }
 
     // --- Governance ---
@@ -95,10 +95,10 @@ contract DSR is DSMath {
     // Value of ZCD balance with end timestamp
     function zcd(uint end, uint dai) public view validEnd(end) returns (uint) {
         require(ratio[end] != 0); // cashout ratio for end required
-        return rmul(dai, sub(ONE, ratio[end]));
+        return rmul(dai, subu(RAY, ratio[end]));
     }
 
-    // Value of DCC balance with final and end timestamp
+    // Value of DCC balance with close and end timestamp
     function dcc(uint end, uint dai) public view validEnd(end) returns (uint) {
         require(ratio[end] != 0); // cashout ratio for end required
         return rmul(dai, ratio[end]);
@@ -106,9 +106,9 @@ contract DSR is DSMath {
 
     // --- User balance with future maturity cash out functions ---
     // Exchange ZCD balance for Dai after emergency shutdown
-    // * User transfers ZCD balance with end timestamp greater than final
+    // * User transfers ZCD balance with end timestamp greater than close
     // * User receives the dai value reported by ValueDSR
-    function cashZCD(address usr, uint end, uint dai) external afterFinal(end) {
+    function cashZCD(address usr, uint end, uint dai) external afterClose(end) {
         split.burnZCD(address(this), usr, end, dai);
 
         uint cash = zcd(end, dai); // Get value of ZCD balance in dai
@@ -121,12 +121,12 @@ contract DSR is DSMath {
     }
 
     // Exchange DCC balance for Dai after emergency shutdown
-    // * User transfers DCC balance with end timestamp greater than final
+    // * User transfers DCC balance with end timestamp greater than close
     // * User receives the dai value reported by ValueDSR
-    function cashDCC(address usr, uint end, uint pie) external afterFinal(end) {
-        split.burnDCC(address(this), usr, final, end, pie); // Savings earnt until final need to be claimed prior to cashing out
+    function cashDCC(address usr, uint end, uint pie) external afterClose(end) {
+        split.burnDCC(address(this), usr, close, end, pie); // Savings earnt until close need to be claimed prior to cashing out
 
-        uint dai = mul(pie, split.chi(address(this), final));
+        uint dai = mulu(pie, split.chi(address(this), close));
         uint cash = dcc(end, dai); // Get value of DCC balance in dai
 
         uint lastSnapshotTimestamp = split.lastSnapshot(address(this));
@@ -137,15 +137,15 @@ contract DSR is DSMath {
     }
 
     // Exchange FutureDCC balance for Dai after emergency shutdown
-    // * User transfers FutureDCC balance with slice timestamp greater than final
+    // * User transfers FutureDCC balance with slice timestamp greater than close
     // * User receives the dai value reported by ValueDSR
-    function cashFutureDCC(address usr, uint start, uint slice, uint end, uint pie) external afterFinal(slice) {
+    function cashFutureDCC(address usr, uint start, uint slice, uint end, uint pie) external afterClose(slice) {
         split.burnFutureDCC(address(this), usr, start, slice, end, pie);
 
-        uint dai = mul(pie, split.chi(address(this), start)); // calculate original dai notional amount
+        uint dai = mulu(pie, split.chi(address(this), start)); // calculate original dai notional amount
 
         // FutureDCC value calculated from values in dai reported for DCC balances with end timestamps at slice and end
-        uint cash = sub(dcc(end, dai), dcc(slice, dai));
+        uint cash = subu(dcc(end, dai), dcc(slice, dai));
 
         uint lastSnapshotTimestamp = split.lastSnapshot(address(this));
         uint chiLast = split.chi(address(this), lastSnapshotTimestamp); // last chi value
