@@ -4,38 +4,21 @@ import "./lib/DSMath.sol";
 import "./interfaces/YieldLike.sol";
 
 contract Split is DSMath {
-    // --- Approvals ---
-    mapping(address => mapping (address => bool)) public approvals; // holder address => approved address => approval status
-
-    event Approval(address indexed sender, address indexed usr, bool approval);
-
-    // Allow/disallow an address to perform actions on balances within split and adapters
-    function approve(address usr, bool approval) external {
-        approvals[msg.sender][usr] = approval;
-        emit Approval(msg.sender, usr, approval);
-    }
-
-    modifier approved(address usr) {
-        require(either(msg.sender == usr, approvals[usr][msg.sender] == true));
-        _;
-    }
-
     address public gov; // governance contract
 
-    constructor() public {
-        gov = msg.sender;
-    }
+    mapping(address => mapping (address => bool)) public approvals; // holder address => approved address => approval status
 
-    mapping (address => bool) public yields; // approved yield adapter addresses
     mapping (address => mapping (bytes32 => uint)) public zcd; // user address => zcd class => zcd balance [rad: 45 decimal fixed point number]
     mapping (address => mapping (bytes32 => uint)) public dcc; // user address => dcc class => dcc balance [wad: 18 decimal fixed point number]
-    mapping (address => mapping (uint => uint)) public chi; // yield adapter => time => pot.chi value [ray: 27 decimal fixed point number]
-    mapping (address => uint) public lastSnapshot; // yield adapter => last snapshot timestamp
     mapping (bytes32 => uint) public totalSupply; // class => zcd supply [rad]
-
     // dai : implies rad number type is being used in input
     // pie : implies wad number type is being used in input
 
+    mapping (address => bool) public yields; // approved yield adapter addresses
+    mapping (address => mapping (uint => uint)) public chi; // yield adapter => time => chi value [ray: 27 decimal fixed point number]
+    mapping (address => uint) public lastSnapshot; // yield adapter => last snapshot timestamp
+
+    event Approval(address indexed sender, address indexed usr, bool approval);
     event MintZCD(address indexed usr, bytes32 indexed class, address yield, uint end, uint dai);
     event BurnZCD(address indexed usr, bytes32 indexed class, address yield, uint end, uint dai);
     event MintDCC(address indexed usr, bytes32 indexed class, address yield, uint start, uint end, uint pie);
@@ -45,6 +28,16 @@ contract Split is DSMath {
     event MoveZCD(address indexed src, address indexed dst, bytes32 indexed class, uint dai);
     event MoveDCC(address indexed src, address indexed dst, bytes32 indexed class, uint pie);
     event ChiSnapshot(address yield, uint time, uint chi);
+
+    constructor() public {
+        gov = msg.sender;
+    }
+
+    // --- User Approval Modifier ---
+    modifier approved(address usr) {
+        require(either(msg.sender == usr, approvals[usr][msg.sender] == true));
+        _;
+    }
 
     // --- Governance Modifiers ---
     modifier onlyGov() {
@@ -67,6 +60,13 @@ contract Split is DSMath {
     function addYieldAdapter(address yield_) public onlyGov {
         require(YieldLike(yield_).split() == address(this)); // ensure yield adapter is configured for this split deployment
         yields[yield_] = true;
+    }
+
+    // --- User Approvals ---
+    // Allow/disallow an address to perform actions on balances within split and adapters
+    function approve(address usr, bool approval) external {
+        approvals[msg.sender][usr] = approval;
+        emit Approval(msg.sender, usr, approval);
     }
 
     // --- Internal functions ---
@@ -199,7 +199,8 @@ contract Split is DSMath {
     function redeem(address yield, address usr, uint end, uint snap, uint dai) external approved(usr) untilFinal(yield, end) {
         require((end <= snap) && (snap <= now)); // Redemption can happen only after end timestamp is past. Snap timestamp needs to be after end but before now.
 
-        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
+        uint last = lastSnapshot[yield]; // last snapshot timestamp
+        uint chiLast = chi[yield][last]; // last chi value
         uint chiSnap = chi[yield][snap]; // chi value at snap timestamp
         require(chiSnap != 0); // ensure a valid chi snapshot exists before calculating any DSR earnt
         uint pie = dai / chiSnap; // rad / ray -> wad // Calculate pie assuming user redeemed dai in the past at end timestamp and deposited it in Pot at snap timestamp
@@ -218,7 +219,8 @@ contract Split is DSMath {
     function claim(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilFinal(yield, snap) {
         require((start <= snap) && (snap <= end));
 
-        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
+        uint last = lastSnapshot[yield]; // last snapshot timestamp
+        uint chiLast = chi[yield][last]; // last chi value
         uint chiStart = chi[yield][start]; // chi value at start timestamp
         uint chiSnap = chi[yield][snap]; // chi value at snap timestamp
 
@@ -244,7 +246,8 @@ contract Split is DSMath {
     function rewind(address yield, address usr, uint start, uint end, uint snap, uint pie) external approved(usr) untilFinal(yield, lastSnapshot[yield]) {
         require((snap <= start) && (start <= end));
 
-        uint chiLast = chi[yield][lastSnapshot[yield]]; // last chi value
+        uint last = lastSnapshot[yield]; // last snapshot timestamp
+        uint chiLast = chi[yield][last]; // last chi value
         uint chiSnap = chi[yield][snap];
         uint chiStart = chi[yield][start];
 
