@@ -1,43 +1,9 @@
 pragma solidity 0.5.12;
 
-contract YieldLike {
-    function split() external returns (address);
-    function canSnapshot() external returns (bool);
-    function canInsert() external returns (bool);
-    function final() external returns (uint);
-    function snapshot() external returns (uint);
+import "./lib/DSMath.sol";
+import "./interfaces/YieldLike.sol";
 
-    function lock(address usr, uint chi, uint pie) external returns (uint);
-    function unlock(address usr, uint chi, uint pie) external returns (uint);
-}
-
-contract Split {
-    // --- Lib ---
-    function either(bool x, bool y) internal pure returns (bool z) {
-        assembly{ z := or(x, y)}
-    }
-    function both(bool x, bool y) internal pure returns (bool z) {
-        assembly{ z := and(x, y)}
-    }
-
-    // --- Math ---
-    uint256 constant ONE = 10 ** 27;
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x);
-    }
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x);
-    }
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x);
-    }
-    function rmul(uint x, uint y) internal pure returns (uint z) {
-        z = mul(x, y) / ONE;
-    }
-    function rdiv(uint x, uint y) internal pure returns (uint z) {
-        z = mul(x, ONE) / y;
-    }
-
+contract Split is DSMath {
     // --- Approvals ---
     mapping(address => mapping (address => bool)) public approvals; // holder address => approved address => approval status
 
@@ -108,8 +74,8 @@ contract Split {
     function mintZCD(address yield, address usr, uint end, uint dai) public onlySplitOrYieldAdapters {
         bytes32 class = keccak256(abi.encodePacked(yield, end));
 
-        zcd[usr][class] = add(zcd[usr][class], dai);
-        totalSupply[class] = add(totalSupply[class], dai);
+        zcd[usr][class] = addu(zcd[usr][class], dai);
+        totalSupply[class] = addu(totalSupply[class], dai);
         emit MintZCD(usr, class, yield, end, dai);
     }
 
@@ -119,8 +85,8 @@ contract Split {
 
         require(zcd[usr][class] >= dai, "zcd/insufficient-balance");
 
-        zcd[usr][class] = sub(zcd[usr][class], dai);
-        totalSupply[class] = sub(totalSupply[class], dai);
+        zcd[usr][class] = subu(zcd[usr][class], dai);
+        totalSupply[class] = subu(totalSupply[class], dai);
         emit BurnZCD(usr, class, yield, end, dai);
     }
 
@@ -128,7 +94,7 @@ contract Split {
     function mintDCC(address yield, address usr, uint start, uint end, uint pie) public onlySplitOrYieldAdapters {
         bytes32 class = keccak256(abi.encodePacked(yield, start, end));
 
-        dcc[usr][class] = add(dcc[usr][class], pie);
+        dcc[usr][class] = addu(dcc[usr][class], pie);
         emit MintDCC(usr, class, yield, start, end, pie);
     }
 
@@ -138,7 +104,7 @@ contract Split {
 
         require(dcc[usr][class] >= pie, "dcc/insufficient-balance");
 
-        dcc[usr][class] = sub(dcc[usr][class], pie);
+        dcc[usr][class] = subu(dcc[usr][class], pie);
         emit BurnDCC(usr, class, yield, start, end, pie);
     }
 
@@ -146,7 +112,7 @@ contract Split {
     function mintFutureDCC(address yield, address usr, uint start, uint slice, uint end, uint pie) public onlySplitOrYieldAdapters {
         bytes32 class = keccak256(abi.encodePacked(yield, start, slice, end));
 
-        dcc[usr][class] = add(dcc[usr][class], pie);
+        dcc[usr][class] = addu(dcc[usr][class], pie);
         emit MintFutureDCC(usr, class, yield, start, slice, end, pie);
     }
 
@@ -156,7 +122,7 @@ contract Split {
 
         require(dcc[usr][class] >= pie, "dcc/insufficient-balance");
 
-        dcc[usr][class] = sub(dcc[usr][class], pie);
+        dcc[usr][class] = subu(dcc[usr][class], pie);
         emit BurnFutureDCC(usr, class, yield, start, slice, end, pie);
     }
 
@@ -170,8 +136,8 @@ contract Split {
     function moveZCD(address src, address dst, bytes32 class, uint dai) external approved(src) {
         require(zcd[src][class] >= dai, "zcd/insufficient-balance");
 
-        zcd[src][class] = sub(zcd[src][class], dai);
-        zcd[dst][class] = add(zcd[dst][class], dai);
+        zcd[src][class] = subu(zcd[src][class], dai);
+        zcd[dst][class] = addu(zcd[dst][class], dai);
 
         emit MoveZCD(src, dst, class, dai);
     }
@@ -180,8 +146,8 @@ contract Split {
     function moveDCC(address src, address dst, bytes32 class, uint pie) external approved(src) {
         require(dcc[src][class] >= pie, "dcc/insufficient-balance");
 
-        dcc[src][class] = sub(dcc[src][class], pie);
-        dcc[dst][class] = add(dcc[dst][class], pie);
+        dcc[src][class] = subu(dcc[src][class], pie);
+        dcc[dst][class] = addu(dcc[dst][class], pie);
 
         emit MoveDCC(src, dst, class, pie);
     }
@@ -266,7 +232,7 @@ contract Split {
         }
 
         // dai earnt by deposit as savings between two chi values is moved out. Deposit remains in Pot.
-        uint pieOut = mul(pie, sub(chiSnap, chiStart)) / chiLast; // wad * ray / ray -> wad
+        uint pieOut = mulu(pie, subu(chiSnap, chiStart)) / chiLast; // wad * ray / ray -> wad
 
         YieldLike(yield).unlock(usr, chiLast, pieOut);  // Dai earnt sent to DCC owner
     }
@@ -284,11 +250,11 @@ contract Split {
 
         require((chiSnap != 0) && (chiStart != 0) && (chiSnap < chiStart));
 
-        uint notional = mul(pie, chiStart); // notional amount in dai earning DSR from start for current dcc balance. wad * ray -> rad
+        uint notional = mulu(pie, chiStart); // notional amount in dai earning DSR from start for current dcc balance. wad * ray -> rad
         uint pieSnap = notional / chiSnap; // pie value for the same notional amount if deposited at the earlier snap timestamp. rad / ray -> wad
 
         // New total dai amount at start timestamp with earlier deposit = notional amount + dai earnt from dsr between snap and start timestamps
-        uint total = mul(pieSnap, chiStart); // wad * ray -> rad 
+        uint total = mulu(pieSnap, chiStart); // wad * ray -> rad 
 
         burnDCC(yield, usr, start, end, pie); // Burn old DCC balance between start and end timestamps
 
@@ -296,9 +262,9 @@ contract Split {
         mintDCC(yield, usr, snap, end, pieSnap); // Mint new DCC balance between snap and end timestamps.
 
         // Difference between new total and old notional amount at the start timestamp, in pie terms at current chi value
-        // uint pieIn = sub(total, notional) / chiLast; // (rad - rad) / ray -> wad
+        // uint pieIn = subu(total, notional) / chiLast; // (rad - rad) / ray -> wad
 
-        YieldLike(yield).lock(usr, chiLast, sub(total, notional) / chiLast); // Collect dai from user for this adjustment
+        YieldLike(yield).lock(usr, chiLast, subu(total, notional) / chiLast); // Collect dai from user for this adjustment
     }
 
     // Withdraw ZCD and DCC before maturity to dai
@@ -331,7 +297,7 @@ contract Split {
     // * User receives a DCC balance with t2 and t4 timestamps
     function merge(address yield, address usr, uint t1, uint t2, uint t3, uint t4, uint pie) external approved(usr) {
         require(t1 <= t2 && t2 < t3 && t3 < t4); // t1 can equal t2
-        uint futurePie = (t1 == t2) ? pie : mul(pie, chi[yield][t2]) / chi[yield][t1]; // FutureDCC balance that needs to be burnt if t1 and t2 are not equal
+        uint futurePie = (t1 == t2) ? pie : mulu(pie, chi[yield][t2]) / chi[yield][t1]; // FutureDCC balance that needs to be burnt if t1 and t2 are not equal
 
         burnDCC(yield, usr, t2, t3, pie);
         burnFutureDCC(yield, usr, t1, t3, t4, futurePie);
@@ -372,7 +338,7 @@ contract Split {
         require(chi[yield][t1] != 0); // chi value at t1 is used to calculate original dai notional amount
         require(chi[yield][t3] != 0); // chi value snapshot needs to exist to create DCC balance with start timestamp set to t3
 
-        uint newpie = mul(pie, chi[yield][t1]) / chi[yield][t3]; // original dai notional amount normalized with chi value at t3 timestamp for new DCC balance
+        uint newpie = mulu(pie, chi[yield][t1]) / chi[yield][t3]; // original dai notional amount normalized with chi value at t3 timestamp for new DCC balance
 
         burnFutureDCC(yield, usr, t1, t2, t4, pie);
         mintDCC(yield, usr, t3, t4, newpie); // savings earnt between t2 to t3 are lost if they aren't equal

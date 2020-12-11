@@ -1,54 +1,12 @@
 pragma solidity 0.5.12;
 
-contract VatLike {
-    function hope(address) external;
-    function move(address,address,uint256) external;
-}
+import "../lib/DSMath.sol";
+import "../interfaces/VatLike.sol";
+import "../interfaces/PotLike.sol";
+import "../interfaces/SplitLike.sol";
 
-contract PotLike {
-    function vat() public returns (VatLike);
-    function chi() external returns (uint ray);
-    function rho() external returns (uint);
-    function live() public returns (uint);
-    function drip() public returns (uint);
-    function join(uint pie) public;
-    function exit(uint pie) public;
-}
-
-contract SplitDSRLike {
-    function vat() public returns (VatLike);
-    function gov() public returns (address);
-
-    function chi(address,uint) public returns (uint);
-
-    function mintZCD(address yield, address usr, uint end, uint dai) external;
-    function burnZCD(address yield, address usr, uint end, uint dai) external;
-    function mintDCC(address yield, address usr, uint start, uint end, uint pie) external;
-    function burnDCC(address yield, address usr, uint start, uint end, uint pie) external;
-    function mintFutureDCC(address yield, address usr, uint start, uint slice, uint end, uint pie) external;
-    function burnFutureDCC(address yield, address usr, uint start, uint slice, uint end, uint pie) external;
-}
-
-contract DSR {
-    // --- Math ---
-    uint256 constant ONE = 10 ** 27;
-    function add(uint x, uint y) internal pure returns (uint z) {
-        require((z = x + y) >= x);
-    }
-    function sub(uint x, uint y) internal pure returns (uint z) {
-        require((z = x - y) <= x);
-    }
-    function mul(uint x, uint y) internal pure returns (uint z) {
-        require(y == 0 || (z = x * y) / y == x);
-    }
-    function rmul(uint x, uint y) internal pure returns (uint z) {
-        z = mul(x, y) / ONE;
-    }
-    function rdiv(uint x, uint y) internal pure returns (uint z) {
-        z = mul(x, ONE) / y;
-    }
-
-    SplitDSRLike public split; // SplitDSR contract address
+contract DSR is DSMath {
+    SplitLike public split; // SplitDSR contract address
     VatLike public vat;
     PotLike public pot;
     bool public canSnapshot;
@@ -59,10 +17,10 @@ contract DSR {
     mapping (uint => uint) public ratio; // end timestamp => dcc balance cashout ratio [ray]
 
     constructor(address split_, address pot_) public {
-        split = SplitDSRLike(split_);
+        split = SplitLike(split_);
 
         pot = PotLike(pot_);
-        vat = pot.vat();
+        vat = VatLike(pot.vat());
 
         vat.hope(address(pot)); // Approve Pot to modify Split's Dai balance within Vat
         canSnapshot = true;
