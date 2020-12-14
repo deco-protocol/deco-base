@@ -1,7 +1,7 @@
 pragma solidity 0.5.12;
 
 import "../lib/DSMath.sol";
-import "../interfaces/VatLike.sol";
+import "../interfaces/ChaiLike.sol";
 import "../interfaces/PotLike.sol";
 import "../interfaces/CoreLike.sol";
 
@@ -11,19 +11,16 @@ contract DSR is DSMath {
     bool public canInsert; // gov only insert allowed
     bool public canOverwrite; // amp value overwrite allowed
 
-    VatLike public vat; // maker protocol vat address
-    PotLike public pot; // maker protocol pot address
+    ChaiLike public chai; // chai
+    PotLike public pot; // pot
 
     uint public closeTimestamp; // yield adapter close timestamp
     mapping (uint => uint) public ratio; // maturity timestamp => balance cashout ratio [ray]
 
-    constructor(address core_, address pot_) public {
+    constructor(address core_, address chai_) public {
         core = CoreLike(core_);
-
-        pot = PotLike(pot_);
-        vat = VatLike(pot.vat());
-
-        vat.hope(address(pot)); // approve pot to modify this adapters dai balance within vat
+        chai = ChaiLike(chai_);
+        pot = PotLike(chai.pot());
 
         canSnapshot = true; // allow snaposhot
         canInsert = true; // allow insert
@@ -52,21 +49,13 @@ contract DSR is DSMath {
     }
 
     function lock(address usr, uint amp, uint cbal_) public onlyCore returns (uint) {
-        uint zbal_ = mulu(cbal_, amp); // calculate notional amount with normalized balance input
-
-        vat.move(usr, address(this), zbal_); // notional amount of dai from user to here
-        pot.join(cbal_); // deposit into pot
-
-        return zbal_;
+        require(chai.transferFrom(usr, address(this), cbal_)); // transfer cbal amount of chai from usr
+        return mulu(cbal_, amp); // return notional amount
     }
 
     function unlock(address usr, uint amp, uint cbal_) public onlyCore returns (uint) {
-        uint zbal_ = mulu(cbal_, amp);
-
-        pot.exit(cbal_); // withdraw from pot
-        vat.move(address(this), usr, zbal_); // notional amount of dai from here to user
-
-        return zbal_;
+        require(chai.transferFrom(address(this), usr, cbal_)); // transfer cbal amount of chai to usr
+        return mulu(cbal_, amp); // return notional amount
     }
 
     function close() external {
