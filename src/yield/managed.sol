@@ -1,33 +1,23 @@
 pragma solidity 0.5.12;
 
 import "../lib/DSMath.sol";
-import "../interfaces/VatLike.sol";
-import "../interfaces/PotLike.sol";
 import "../interfaces/CoreLike.sol";
 
-contract DSR is DSMath {
+contract Managed is DSMath {
     CoreLike public core; // core contract address
     bool public canSnapshot; // public snapshot allowed
     bool public canInsert; // gov only insert allowed
     bool public canOverwrite; // amp value overwrite allowed
 
-    VatLike public vat; // maker protocol vat address
-    PotLike public pot; // maker protocol pot address
-
     uint public closeTimestamp; // yield adapter close timestamp
     mapping (uint => uint) public ratio; // maturity timestamp => balance cashout ratio [ray]
 
-    constructor(address core_, address pot_) public {
+    constructor(address core_) public {
         core = CoreLike(core_);
 
-        pot = PotLike(pot_);
-        vat = VatLike(pot.vat());
-
-        vat.hope(address(pot)); // approve pot to modify this adapters dai balance within vat
-
-        canSnapshot = true; // allow snaposhot
+        canSnapshot = false; // disallow snaposhot
         canInsert = true; // allow insert
-        canOverwrite = false; // disallow overwrite
+        canOverwrite = true; // allow overwrite
         closeTimestamp = uint(-1); // initialized to MAX_UINT, updated after close
     }
 
@@ -47,15 +37,11 @@ contract DSR is DSMath {
         _;
     }
 
-    function snapshot() public returns (uint) {
-        return pot.drip(); // retrieve amp value from pot
-    }
-
     function lock(address usr, uint amp, uint cbal_) public onlyCore returns (uint) {
         uint zbal_ = mulu(cbal_, amp); // calculate notional amount with normalized balance input
 
-        vat.move(usr, address(this), zbal_); // notional amount of dai from user to here
-        pot.join(cbal_); // deposit into pot
+        // TODO: transfer yield token from user
+        usr;
 
         return zbal_;
     }
@@ -63,17 +49,14 @@ contract DSR is DSMath {
     function unlock(address usr, uint amp, uint cbal_) public onlyCore returns (uint) {
         uint zbal_ = mulu(cbal_, amp);
 
-        pot.exit(cbal_); // withdraw from pot
-        vat.move(address(this), usr, zbal_); // notional amount of dai from here to user
+        // TODO: transfer yield token to user
+        usr;
 
         return zbal_;
     }
 
-    function close() external {
-        require(pot.live() == 0); // pot needs to be caged for close to succeed
+    function close() external onlyGov {
         require(closeTimestamp == uint(-1)); // can be closed only once
-
-        snapshot();
         closeTimestamp = now; // set close timestamp
     }
 

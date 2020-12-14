@@ -1,12 +1,7 @@
 pragma solidity 0.5.12;
 
 import "./nf_token.sol";
-
-contract SplitDSRLike {
-    function approvals(address, address) external returns (bool);
-    function moveZCD(address, address, bytes32, uint) external;
-    function moveDCC(address, address, bytes32, uint) external;
-}
+import "../interfaces/CoreLike.sol";
 
 contract LibNote {
     event LogNote(
@@ -37,8 +32,8 @@ contract LibNote {
     }
 }
 
-// Base ERC721 Token contract for ZCDAdapterERC721 and DCCAdapterERC721
-contract SplitNFT is NFToken, LibNote {
+// Base ERC721 Token contract for ZAdapterERC721 and CAdapterERC721
+contract NFT is NFToken, LibNote {
     // --- Contract Auth ---
     mapping (address => uint) public wards;
     function rely(address guy) external note auth { wards[guy] = 1; }
@@ -76,13 +71,13 @@ contract SplitNFT is NFToken, LibNote {
     }
 }
 
-contract ZCDAdapterERC721 {
-    SplitDSRLike split;
-    SplitNFT zcdnft;
+contract ZeroAdapterERC721 {
+    CoreLike core;
+    NFT zNft;
 
-    constructor(address splitdsr_) public {
-        split = SplitDSRLike(splitdsr_);
-        zcdnft = new SplitNFT();
+    constructor(address core_) public {
+        core = CoreLike(core_);
+        zNft = new NFT();
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
@@ -90,33 +85,33 @@ contract ZCDAdapterERC721 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, core.approvals(usr, msg.sender) == true));
         _;
     }
 
-    function exit(address src, address dst, bytes32 class, uint dai) external approved(src) {
-        split.moveZCD(src, address(this), class, dai); // Move ZCD from src address to adapter
-        zcdnft.mint(dst, class, dai); // Mint ZCD ERC721 token to dst address
+    function exit(address src, address dst, bytes32 class, uint zbal_) external approved(src) {
+        core.moveZero(src, address(this), class, zbal_);
+        zNft.mint(dst, class, zbal_);
     }
 
     function join(address src, address dst, uint tokenId_) external approved(src) {
-        require(src == zcdnft.ownerOf(tokenId_));
+        require(src == zNft.ownerOf(tokenId_));
 
-        bytes32 class = zcdnft.class(tokenId_);
-        uint dai = zcdnft.amount(tokenId_);
+        bytes32 class = zNft.class(tokenId_);
+        uint zbal_ = zNft.amount(tokenId_);
 
-        zcdnft.burn(tokenId_); // Burn ZCD ERC721 from src address
-        split.moveZCD(address(this), dst, class, dai); // Move ZCD balance from adapter to dst address
+        zNft.burn(tokenId_);
+        core.moveZero(address(this), dst, class, zbal_);
     }
 }
 
-contract DCCAdapterERC721 {
-    SplitDSRLike split;
-    SplitNFT dccnft;
+contract ClaimAdapterERC721 {
+    CoreLike core;
+    NFT cNft;
 
-    constructor(address splitdsr_) public {
-        split = SplitDSRLike(splitdsr_);
-        dccnft = new SplitNFT();
+    constructor(address core_) public {
+        core = CoreLike(core_);
+        cNft = new NFT();
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
@@ -124,22 +119,22 @@ contract DCCAdapterERC721 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, core.approvals(usr, msg.sender) == true));
         _;
     }
 
-    function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
-        split.moveDCC(src, address(this), class, pie); // Move DCC from src address to adapter
-        dccnft.mint(dst, class, pie);  // Mint DCC ERC721 token to dst address
+    function exit(address src, address dst, bytes32 class, uint cbal_) external approved(src) {
+        core.moveClaim(src, address(this), class, cbal_);
+        cNft.mint(dst, class, cbal_);
     }
 
     function join(address src, address dst, uint tokenId_) external approved(src) {
-        require(src == dccnft.ownerOf(tokenId_));
+        require(src == cNft.ownerOf(tokenId_));
 
-        bytes32 class = dccnft.class(tokenId_);
-        uint pie = dccnft.amount(tokenId_);
+        bytes32 class = cNft.class(tokenId_);
+        uint cbal_ = cNft.amount(tokenId_);
 
-        dccnft.burn(tokenId_); // Burn DCC ERC721 from src address
-        split.moveDCC(address(this), dst, class, pie); // Move DCC balance from adapter to dst address
+        cNft.burn(tokenId_);
+        core.moveClaim(address(this), dst, class, cbal_);
     }
 }

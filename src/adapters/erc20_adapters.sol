@@ -2,25 +2,20 @@ pragma solidity 0.5.12;
 
 import "./erc20.sol";
 import "./strings.sol";
+import "../interfaces/CoreLike.sol";
 
-contract SplitDSRLike {
-    function approvals(address, address) external returns (bool);
-    function moveZCD(address, address, bytes32, uint) external;
-    function moveDCC(address, address, bytes32, uint) external;
-}
-
-contract ZCDAdapterERC20 {
+contract ZeroAdapterERC20 {
     using Strings for uint;
 
-    SplitDSRLike split;
+    CoreLike core;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
-    event NewZCDToken(bytes32 indexed class, address token);
+    event NewZeroToken(bytes32 indexed class, address token);
 
-    constructor(uint256 chainId_, address splitdsr_) public {
+    constructor(uint256 chainId_, address core_) public {
         chainId = chainId_;
-        split = SplitDSRLike(splitdsr_);
+        core = CoreLike(core_);
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
@@ -36,58 +31,49 @@ contract ZCDAdapterERC20 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, core.approvals(usr, msg.sender) == true));
         _;
     }
 
-    // Deploy an ERC20 token contract for a ZCD class
-    function deployToken(uint end) public returns (address) {
-        bytes32 class = keccak256(abi.encodePacked(end));
-        require(address(tokens[class]) == address(0), "zcd/token-exists");
+    function deployToken(uint maturity) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(maturity));
+        require(address(tokens[class]) == address(0), "zero/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(end.toString())), "ZCD", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(maturity.toString())), "ZERO", "1", 18);
         tokens[class] = address(token);
 
-        emit NewZCDToken(class, address(token));
+        emit NewZeroToken(class, address(token));
 
         return address(token);
     }
 
-    // Exit user's Split ZCD balance to its deployed ZCD ERC20 token
-    // * User transfers ZCD balance to adapter
-    // * User receives ZCD ERC20 balance
-    // * Please note that `dai` in input is a wad number type with 18 decimals unlike Split ZCD
-    function exit(address src, address dst, bytes32 class, uint dai) external approved(src) {
-        require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
+    function exit(address src, address dst, bytes32 class, uint zbal_) external approved(src) {
+        require(address(tokens[class]) != address(0), "zero/token-not-deployed");
 
-        split.moveZCD(src, address(this), class, toRad(dai)); // Move ZCD from src address to adapter
-        ERC20(tokens[class]).mint(dst, dai); // Mint ZCD ERC20 tokens to dst address
+        core.moveZero(src, address(this), class, toRad(zbal_));
+        ERC20(tokens[class]).mint(dst, zbal_);
     }
 
-    // Join user's ZCD ERC20 token balance to Split
-    // * User transfers ZCD ERC20 balance to adapter
-    // * User receives ZCD balance in Split
-    // * Please note that `dai` in input is a wad number type with 18 decimals unlike Split ZCD
-    function join(address src, address dst, bytes32 class, uint dai) external approved(src) {
-        require(address(tokens[class]) != address(0), "zcd/token-not-deployed");
+    function join(address src, address dst, bytes32 class, uint zbal_) external approved(src) {
+        require(address(tokens[class]) != address(0), "zero/token-not-deployed");
 
-        ERC20(tokens[class]).burn(src, dai); // Burn ZCD ERC20 tokens from src address
-        split.moveZCD(address(this), dst, class, toRad(dai)); // Move ZCD balance from adapter to dst address
+        ERC20(tokens[class]).burn(src, zbal_);
+        core.moveZero(address(this), dst, class, toRad(zbal_));
     }
 }
 
-contract DCCAdapterERC20 {
+contract ClaimAdapterERC20 {
     using Strings for uint;
 
-    SplitDSRLike split;
+    CoreLike core;
     uint256 chainId;
     mapping(bytes32 => address) public tokens;
 
-    event NewDCCToken(bytes32 indexed class, address token);
+    event NewClaimToken(bytes32 indexed class, address token);
 
-    constructor(uint256 chainId_, address splitdsr_) public {
+    constructor(uint256 chainId_, address core_) public {
         chainId = chainId_;
-        split = SplitDSRLike(splitdsr_);
+        core = CoreLike(core_);
     }
 
     function either(bool x, bool y) internal pure returns (bool z) {
@@ -95,53 +81,45 @@ contract DCCAdapterERC20 {
     }
 
     modifier approved(address usr) {
-        require(either(msg.sender == usr, split.approvals(usr, msg.sender) == true));
+        require(either(msg.sender == usr, core.approvals(usr, msg.sender) == true));
         _;
     }
 
-    // Deploy an ERC20 token contract for a DCC class
-    function deployToken(uint start, uint end) public returns (address) {
-        bytes32 class = keccak256(abi.encodePacked(start, end));
-        require(address(tokens[class]) == address(0), "dcc/token-exists");
+    function deployToken(uint issuance, uint maturity) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(issuance, maturity));
+        require(address(tokens[class]) == address(0), "claim/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(start.toString(), " ", end.toString())), "DCC", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(issuance.toString(), " ", maturity.toString())), "CLAIM", "1", 18);
         tokens[class] = address(token);
 
-        emit NewDCCToken(class, address(token));
+        emit NewClaimToken(class, address(token));
 
         return address(token);
     }
 
-    // Deploy an ERC20 token contract for a FutureDCC class
-    function deployToken(uint start, uint slice, uint end) public returns (address) {
-        bytes32 class = keccak256(abi.encodePacked(start, slice, end));
-        require(address(tokens[class]) == address(0), "dcc/token-exists");
+    function deployToken(uint issuance, uint activation, uint maturity) public returns (address) {
+        bytes32 class = keccak256(abi.encodePacked(issuance, activation, maturity));
+        require(address(tokens[class]) == address(0), "futureclaim/token-exists");
 
-        ERC20 token = new ERC20(chainId, string(abi.encodePacked(start.toString(), " ", slice.toString(), " ", end.toString())), "DCC", "1", 18);
+        ERC20 token = new ERC20(chainId, string(abi.encodePacked(issuance.toString(), " ", activation.toString(), " ", maturity.toString())), "FCLAIM", "1", 18);
         tokens[class] = address(token);
 
-        emit NewDCCToken(class, address(token));
+        emit NewClaimToken(class, address(token));
 
         return address(token);
     }
 
-    // Exit user's Split DCC/FutureDCC balance to its deployed DCC ERC20 token
-    // * User transfers DCC balance to adapter
-    // * User receives DCC ERC20 balance
-    function exit(address src, address dst, bytes32 class, uint pie) external approved(src) {
-        require(address(tokens[class]) != address(0), "dcc/token-not-deployed");
+    function exit(address src, address dst, bytes32 class, uint cbal_) external approved(src) {
+        require(address(tokens[class]) != address(0), "claim/token-not-deployed");
 
-        split.moveDCC(src, address(this), class, pie); // Move DCC from src address to adapter
-        ERC20(tokens[class]).mint(dst, pie); // Mint DCC ERC20 tokens to dst address
+        core.moveClaim(src, address(this), class, cbal_);
+        ERC20(tokens[class]).mint(dst, cbal_);
     }
 
-    // Join user's DCC/FutureDCC ERC20 token balance to Split
-    // * User transfers DCC ERC20 balance to adapter
-    // * User receives DCC balance in Split
-    function join(address src, address dst, bytes32 class, uint pie) external approved(src) {
-        require(address(tokens[class]) != address(0), "dcc/token-not-deployed");
+    function join(address src, address dst, bytes32 class, uint cbal_) external approved(src) {
+        require(address(tokens[class]) != address(0), "claim/token-not-deployed");
 
-        ERC20(tokens[class]).burn(src, pie); // Burn DCC ERC20 tokens from src address
-        split.moveDCC(address(this), dst, class, pie); // Move DCC balance from adapter to dst address
+        ERC20(tokens[class]).burn(src, cbal_);
+        core.moveClaim(address(this), dst, class, cbal_);
     }
 }
