@@ -3,42 +3,45 @@ pragma solidity ^0.7.6;
 
 interface CoreLike{
     function gov() external returns (address);
-    function zBal(address, bytes32) external returns (uint);
-    function cBal(address, bytes32) external returns (uint);
-    function totalSupply(bytes32) external returns (uint);
+    function zBal(address usr, bytes32 class_) external returns (uint rad_);
+    function cBal(address usr, bytes32 class_) external returns (uint wad_);
+    function totalSupply(bytes32 class_) external returns (uint rad_);
     
-    function yields(address) external returns (bool);
-    function amp(address, uint) external returns (uint);
-    function latestAmpTimestamp(address) external returns (uint);
+    function amp(uint timestamp_) external returns (uint amp_);
+    function latestAmpTimestamp() external returns (uint timestamp_);
 
-    function approvals(address, address) external returns (bool);
+    function closeTimestamp() external returns (uint timestamp_);
+    function ratio(uint timestamp_) external returns (uint ratio_);
 
-    function enableYieldAdapter(address) external;
-    function approve(address, bool) external;
+    function approvals(address usr, address approved) external returns (bool);
+    function approve(address usr, bool approval) external;
 
-    function mintZero(address, address, uint, uint) external;
-    function burnZero(address, address, uint, uint) external;
-    function mintClaim(address, address, uint, uint, uint) external;
-    function burnClaim(address, address, uint, uint, uint) external;
-    function mintFutureClaim(address, address, uint, uint, uint, uint) external;
-    function burnFutureClaim(address, address, uint, uint, uint, uint) external;
+    function updateGov(address newGov) external;
 
-    function updateGov(address) external;
+    function moveZero(address src, address dst, bytes32 class_, uint zbal_) external;
+    function moveClaim(address src, address dst, bytes32 class_, uint cbal_) external;
 
-    function moveZero(address, address, bytes32, uint) external;
-    function moveClaim(address, address, bytes32, uint) external;
+    function snapshot() external;
+    function insert(uint t, uint amp_) external;
 
-    function snapshot(address) external;
-    function insert(address, uint, uint) external;
+    function issue(address usr, uint issuance, uint maturity, uint cbal_) external;
+    function withdraw(address usr, uint maturity, uint cbal_) external;
+    function redeem(address usr, uint maturity, uint collect_, uint zbal_) external;
+    function collect(address usr, uint issuance, uint maturity, uint collect_, uint cbal_) external;
+    function rewind(address usr, uint issuance, uint maturity, uint collect_, uint cbal_) external;
+    function slice(address usr, uint t1, uint t2, uint t3, uint cbal_) external;
+    function merge(address usr, uint t1, uint t2, uint t3, uint t4, uint cbal_) external;
+    function activate(address usr, uint t1, uint t2, uint t3, uint t4, uint cbal_) external;
+    function sliceFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint cbal_) external;
+    function mergeFuture(address usr, uint t1, uint t2, uint t3, uint t4, uint cbal_) external;
 
-    function issue(address, address, uint, uint, uint) external;
-    function withdraw(address, address, uint, uint) external;
-    function redeem(address, address, uint, uint, uint) external;
-    function collect(address, address, uint, uint, uint, uint) external;
-    function rewind(address, address, uint, uint, uint, uint) external;
-    function slice(address, address, uint, uint, uint, uint) external;
-    function merge(address, address, uint, uint, uint, uint, uint) external;
-    function activate(address, address, uint, uint, uint, uint, uint) external;
-    function sliceFuture(address, address, uint, uint, uint, uint, uint) external;
-    function mergeFuture(address, address, uint, uint, uint, uint, uint) external;
+    function close() external;
+
+    function calculate(uint maturity, uint ratio_) external;
+    function zero(uint maturity, uint zbal_) external returns (uint);
+    function claim(uint maturity, uint zbal_) external returns (uint);
+
+    function cashZero(address usr, uint maturity, uint zbal_) external;
+    function cashClaim(address usr, uint maturity, uint cbal_) external;
+    function cashFutureClaim(address usr, uint issuance, uint activation, uint maturity, uint cbal_) external;
 }
