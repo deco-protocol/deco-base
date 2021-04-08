@@ -1,1 +1,9 @@
-/out
+node_modules/
+cache/
+build/
+typechain/
+artifacts/
+coverage*
+.env
+/bin
+/dist

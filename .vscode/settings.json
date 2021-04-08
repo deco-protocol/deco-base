@@ -1,0 +1,4 @@
+{
+  "solidity.compileUsingRemoteVersion": "v0.7.6+commit.7338295f",
+  "python.pythonPath": "/usr/local/opt/python/bin/python3.7"
+}
