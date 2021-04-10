@@ -1,7 +1,7 @@
 {
-  "name": "split",
+  "name": "deco-yearn",
   "version": "1.0.0",
-  "description": "split",
+  "description": "deco yearn",
   "main": "dist",
   "types": "dist/types",
   "files": [
