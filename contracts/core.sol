@@ -6,7 +6,9 @@ import "./interfaces/IERC20.sol";
 
 contract Core is DSMath {
     address public gov; // governance
+
     IERC20 public yToken; // yToken
+    uint256 public tokenDecimals; // yToken decimals
 
     // user address => zero class => zero balance [wad: 18 decimal fixed point number]
     mapping(address => mapping(bytes32 => uint256)) public zBal;
@@ -69,9 +71,13 @@ contract Core is DSMath {
 
     constructor(address yToken_) {
         gov = msg.sender;
-        yToken = IERC20(yToken_);
 
-        //TODO: set decimals of token
+        yToken = IERC20(yToken_);
+        tokenDecimals = yToken.decimals(); // set decimals of yield token
+        require(
+            tokenDecimals >= 2 && tokenDecimals <= 50,
+            "decimals/exceeds-limits"
+        );
 
         closeTimestamp = uint256(-1); // initialized to MAX_UINT, updated after close
     }
@@ -116,14 +122,23 @@ contract Core is DSMath {
         uint256 frac_,
         uint256 tbal_
     ) internal returns (uint256) {
-        //TODO: adjust tbal_ decimals
-
         // transfer tbal_ amount of yToken balance from usr
         require(
             yToken.transferFrom(usr, address(this), tbal_),
             "transfer-failed"
         );
-        return wdiv(tbal_, frac_); // return notional amount // ex: 100/0.9=110
+
+        uint256 bal_; // wad
+        if (tokenDecimals == 18) {
+            bal_ = tbal_; // decimals are 18
+        } else if (tokenDecimals < 18) {
+            bal_ = mulu(tbal_, 10**subu(18, tokenDecimals)); // ex: 18 - 9 = 9 // decimals lower than 18
+        } else if (tokenDecimals > 18) {
+            bal_ = tbal_ / 10**subu(tokenDecimals, 18); // ex: 25 - 18 = 7 // excess lost // decimals higher than 18
+        }
+        // can delete if else conditions and use only the correct path during deployment
+
+        return wdiv(bal_, frac_); // return notional amount // ex: 100/0.9=110
     }
 
     function unlock(
@@ -132,13 +147,21 @@ contract Core is DSMath {
         uint256 bal_
     ) internal {
         // notional amount * frac = transfer amount // ex: 110 * 0.8 = 88, 110 * 0.1 = 11
-        uint256 transferBal = wmul(bal_, frac_);
+        uint256 adjBal_ = wmul(bal_, frac_); // wad
 
-        //TODO: adjust transferBal decimals for token
+        uint256 tbal_;
+        if (tokenDecimals == 18) {
+            tbal_ = adjBal_; // decimals are 18
+        } else if (tokenDecimals < 18) {
+            tbal_ = adjBal_ / 10**subu(18, tokenDecimals); // ex: 18 - 9 = 9 // decimals lower than 18
+        } else if (tokenDecimals > 18) {
+            tbal_ = mulu(adjBal_, 10**subu(tokenDecimals, 18)); // ex: 25 - 18 = 7 // decimals higher than 18
+        }
+        // can delete if else conditions and use only the correct path during deployment
 
         // transfer yToken bal to usr
         require(
-            yToken.transferFrom(address(this), usr, transferBal),
+            yToken.transferFrom(address(this), usr, tbal_),
             "transfer-failed"
         );
     }
@@ -235,11 +258,11 @@ contract Core is DSMath {
     //     // allow anyone to snapshot frac value from on-chain when available
     // }
 
-    function insert(uint256 t, uint256 frac_) external onlyGov {
+    function insert(uint256 t, uint256 frac_) external onlyGov untilClose(t) {
         // governance calculates frac value from pricePerShare
-        // frac is in wad
-
+        require(frac_ <= WAD, "frac/above-one"); // should be 1 wad or below
         require(frac[t] == 0, "frac/overwrite-disabled"); // overwriting frac value disabled
+        require(t <= block.timestamp, "frac/future-timestamp"); // cant insert at a future timestamp
 
         frac[t] = frac_;
 
@@ -267,7 +290,7 @@ contract Core is DSMath {
         require(frac[issuance] != 0, "frac/invalid");
 
         // lock tbal_ token balance and receive bal_ notional amount of zero and claim
-        uint256 bal_ = lock(usr, frac[issuance], tbal_); // wad
+        uint256 bal_ = lock(usr, frac[issuance], tbal_); // tbal_ in token decimals, bal_ in wad
 
         // issue same notional amount of zero and claim
         mintZero(usr, maturity, bal_);
@@ -329,7 +352,7 @@ contract Core is DSMath {
         require(issuanceFrac != 0, "frac/invalid"); // issuance frac value cannot be 0
         require(collectFrac != 0, "frac/invalid"); // collect frac value cannot be 0
 
-        require(collectFrac > issuanceFrac, "frac/no-difference"); // frac difference should be present
+        require(issuanceFrac > collectFrac, "frac/no-difference"); // frac difference should be present
 
         burnClaim(usr, issuance, maturity, bal_); // burn entire claim balance
         // mint new claim balance for remaining time period between collect and maturity
@@ -357,7 +380,7 @@ contract Core is DSMath {
 
         require(collectFrac != 0, "frac/invalid"); // collect frac value cannot be 0
         require(issuanceFrac != 0, "frac/invalid"); // issuance frac value cannot be 0
-        require(collectFrac < issuanceFrac, "frac/no-difference"); // frac difference should be present
+        require(collectFrac > issuanceFrac, "frac/no-difference"); // frac difference should be present
 
         burnClaim(usr, issuance, maturity, bal_); // burn claim balance
 
@@ -435,8 +458,12 @@ contract Core is DSMath {
         onlyGov
         afterClose(maturity)
     {
+        require(ratio_ <= WAD, "ratio/not-fraction"); // needs to be less than or equal to 1
+        // ex: 0.985 gives 0.985 to zero balance at this maturity and 0.015 to claim balance
+
+        require(ratio[maturity] == 0, "ratio/present"); // cannot overwrite existing ratio
+
         ratio[maturity] = ratio_;
-        // ex: 0.015 gives 0.985 to zero balance at this maturity and 0.015 to claim balance
     }
 
     // --- Zero and Claim Cash Out Functions ---
@@ -446,8 +473,8 @@ contract Core is DSMath {
         afterClose(maturity)
         returns (uint256)
     {
-        require(ratio[maturity] != 0, "ratio/not-set"); // cashout ratio needs to be set for maturity
-        return wmul(bal_, subu(WAD, ratio[maturity])); // yield token value of notional amount in zero
+        require(ratio[maturity] != 0, "ratio/not-set"); // cashout ratio needs to be set for maturity, > 0
+        return wmul(bal_, ratio[maturity]); // yield token value of notional amount in zero
     }
 
     function claim(uint256 maturity, uint256 bal_)
@@ -457,14 +484,14 @@ contract Core is DSMath {
         returns (uint256)
     {
         require(ratio[maturity] != 0, "ratio/not-set"); // cashout ratio needs to be set for maturity
-        return wmul(bal_, ratio[maturity]); // yield token value of notional amount in claim
+        return wmul(bal_, subu(WAD, ratio[maturity])); // yield token value of notional amount in claim
     }
 
     function cashZero(
         address usr,
         uint256 maturity,
         uint256 bal_
-    ) external afterClose(maturity) {
+    ) external approved(usr) afterClose(maturity) {
         burnZero(usr, maturity, bal_); // burn balance
         unlock(usr, frac[closeTimestamp], zero(maturity, bal_)); // transfer yield token to user
     }
@@ -473,24 +500,9 @@ contract Core is DSMath {
         address usr,
         uint256 maturity,
         uint256 bal_
-    ) external afterClose(maturity) {
+    ) external approved(usr) afterClose(maturity) {
         // yield earnt before close needs to be claimed prior to cashing out
         burnClaim(usr, closeTimestamp, maturity, bal_);
         unlock(usr, frac[closeTimestamp], claim(maturity, bal_)); // transfer yield token to user
-    }
-
-    function cashFutureClaim(
-        address usr,
-        uint256 issuance,
-        uint256 maturity,
-        uint256 bal_
-    ) external afterClose(issuance) {
-        burnClaim(usr, issuance, maturity, bal_);
-        // diff transferred
-        unlock(
-            usr,
-            frac[closeTimestamp],
-            subu(claim(maturity, bal_), claim(issuance, bal_))
-        );
     }
 }

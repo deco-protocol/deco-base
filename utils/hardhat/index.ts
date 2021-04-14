@@ -7,4 +7,5 @@ export {
   getWaffleExpect,
   increaseTimeAsync,
   mineBlockAsync,
+  impersonateAccount,
 } from "./testingUtils";

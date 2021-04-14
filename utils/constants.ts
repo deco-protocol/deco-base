@@ -17,3 +17,7 @@ export const ONE_HOUR_IN_SECONDS = BigNumber.from(60 * 60);
 export const ONE_YEAR_IN_SECONDS = BigNumber.from(31557600);
 
 export const PRECISE_UNIT = constants.WeiPerEther;
+
+export const WAD = BigNumber.from("1000000000000000000");
+export const RAY = BigNumber.from("1000000000000000000000000000");
+export const RAD = BigNumber.from("1000000000000000000000000000000000000000000000");

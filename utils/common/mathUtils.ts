@@ -61,3 +61,7 @@ export const divDown = (a: BigNumber, b: BigNumber): BigNumber => {
 export const min = (valueOne: BigNumber, valueTwo: BigNumber): BigNumber => {
   return valueOne.lt(valueTwo) ? valueOne : valueTwo;
 };
+
+export const bn = (val: number): BigNumber => {
+  return BigNumber.from(val);
+};

@@ -1,1 +1,1 @@
-export { SplitFixture } from "./splitFixture";
+export { DecoFixture } from "./decoFixture";

@@ -1,11 +1,11 @@
 import { Signer } from "ethers";
 
-import DeploySplit from "./deploySplit";
+import DeployDeco from "./deployDeco";
 
 export default class DeployHelper {
-  public swap: DeploySplit;
+  public deco: DeployDeco;
 
   constructor(deployerSigner: Signer) {
-    this.swap = new DeploySplit(deployerSigner);
+    this.deco = new DeployDeco(deployerSigner);
   }
 }

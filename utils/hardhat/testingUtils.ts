@@ -2,7 +2,7 @@
 import chai from "chai";
 
 // Use Hardhat version of providers
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import { providers, BigNumber } from "ethers";
 import { Blockchain } from "../common";
 
@@ -54,4 +54,15 @@ export async function increaseTimeAsync(duration: BigNumber): Promise<any> {
 
 async function sendJSONRpcRequestAsync(method: string, params: any[]): Promise<any> {
   return provider.send(method, params);
+}
+
+export async function impersonateAccount(
+  address: string,
+): Promise<providers.JsonRpcSigner> {
+  await network.provider.request({
+    method: "hardhat_impersonateAccount",
+    params: [address],
+  })
+
+  return ethers.provider.getSigner(address)
 }

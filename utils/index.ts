@@ -5,9 +5,9 @@ import { Address } from "./types";
 const provider = ethers.provider;
 export const getBlockchainUtils = () => new Blockchain(provider);
 
-import { SplitFixture } from "./fixtures";
+import { DecoFixture } from "./fixtures";
 
-export const getSplitFixture = (ownerAddress: Address) => new SplitFixture(provider, ownerAddress);
+export const getDecoFixture = (ownerAddress: Address) => new DecoFixture(provider, ownerAddress);
 
 export {
   getAccounts,
@@ -21,6 +21,7 @@ export {
   getRandomAddress,
   increaseTimeAsync,
   mineBlockAsync,
+  impersonateAccount
 } from "./hardhat";
 
 export {
@@ -28,10 +29,15 @@ export {
   min,
   ether,
   gWei,
+  usdc,
+  wad,
+  ray,
+  rad,
   preciseDiv,
   preciseDivCeil,
   preciseMul,
   preciseMulCeil,
   preciseMulCeilInt,
   preciseDivCeilInt,
+  bn,
 } from "./common";
