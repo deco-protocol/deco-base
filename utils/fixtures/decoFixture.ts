@@ -37,7 +37,7 @@ export class DecoFixture {
   public zeroAdapterERC20: ZeroAdapterERC20;
   public claimAdapterERC20: ClaimAdapterERC20;
   public zeroAdapterERC721: ZeroAdapterERC721;
-  public claimAdapterERC721: ClaimAdapterERC721
+  public claimAdapterERC721: ClaimAdapterERC721;
 
   constructor(provider: providers.Web3Provider | providers.JsonRpcProvider, ownerAddress: Address) {
     this._provider = provider;
