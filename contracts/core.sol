@@ -7,7 +7,7 @@ import "./interfaces/IERC20.sol";
 contract Core is DSMath {
     address public gov; // governance
 
-    IERC20 public yToken; // yToken
+    IERC20 public yToken; // Yield Token Address
     uint256 public tokenDecimals; // yToken decimals
 
     // user address => zero class => zero balance [wad: 18 decimal fixed point number]
@@ -79,7 +79,7 @@ contract Core is DSMath {
             "decimals/exceeds-limits"
         );
 
-        closeTimestamp = uint256(-1); // initialized to MAX_UINT, updated after close
+        closeTimestamp = uint256(-1); // initialized to MAX_UINT, updated when this deco instance is closed
     }
 
     // --- User Approval Modifier ---
@@ -98,12 +98,16 @@ contract Core is DSMath {
     }
 
     // --- Close Modifiers ---
+    
+    /// Restricts functions to only work with maturity timestamps UNTIL close
+    /// @dev Regular settlement with withdraw, redeem, and collect
     modifier untilClose(uint256 time) {
-        // restrict core to only work with maturity timestamps before close
         require(time <= closeTimestamp, "after-close");
         _;
     }
 
+    /// Restricts functions to only work with maturity timestamps AFTER close
+    /// @dev Settlement of balances with cashZero and cashClaim
     modifier afterClose(uint256 time) {
         require(closeTimestamp < uint256(-1), "not-closed"); // neeeds to be closed
         require(closeTimestamp < time, "before-close"); // processes only if input timestamp is greater than close
@@ -111,12 +115,23 @@ contract Core is DSMath {
     }
 
     // --- User Approvals ---
+
+    /// Approve or disapprove another address to manage deco assets of a user
+    /// @param usr Target ethereum address
+    /// @param approval true to approve, false to disapprove
+    /// @dev Binary approval check only for any amount
     function approve(address usr, bool approval) external {
         approvals[msg.sender][usr] = approval;
         emit Approval(msg.sender, usr, approval);
     }
 
     // --- Internal functions ---
+
+    /// Lock transfers yield token balance from user to deco
+    /// @param usr User address
+    /// @param frac_ Fraction value to apply on yield token balance
+    /// @param tbal_ Yield token transfered
+    /// @return amount Notional amount equals the underlying base asset amount backing yield token
     function lock(
         address usr,
         uint256 frac_,
@@ -141,6 +156,10 @@ contract Core is DSMath {
         return wdiv(bal_, frac_); // return notional amount // ex: 100/0.9=110
     }
 
+    /// Unlock transfers yield token balance from deco to user
+    /// @param usr User address
+    /// @param frac_ Fraction value to apply on yield token balance
+    /// @param bal_ Notional amount (underlying base asset amount) being unlocked in equivalent yield token balance
     function unlock(
         address usr,
         uint256 frac_,
@@ -166,12 +185,16 @@ contract Core is DSMath {
         );
     }
 
+    /// Mints zero balance
+    /// @param usr User address
+    /// @param maturity Maturity timestamp of zero balance to derive its class
+    /// @param bal_ Zero balance amount
     function mintZero(
         address usr,
         uint256 maturity,
         uint256 bal_
     ) internal {
-        // calculate zero class with adapter address and maturity timestamp
+        // calculate zero class with maturity timestamp
         bytes32 class_ = keccak256(abi.encodePacked(maturity));
 
         zBal[usr][class_] = addu(zBal[usr][class_], bal_);
@@ -179,11 +202,16 @@ contract Core is DSMath {
         emit MintZero(usr, class_, maturity, bal_);
     }
 
+    /// Burns zero balance
+    /// @param usr User address
+    /// @param maturity Maturity timestamp of zero balance to derive its class
+    /// @param bal_ Zero balance amount
     function burnZero(
         address usr,
         uint256 maturity,
         uint256 bal_
     ) internal {
+        // calculate zero class with maturity timestamp
         bytes32 class_ = keccak256(abi.encodePacked(maturity));
 
         require(zBal[usr][class_] >= bal_, "zBal/insufficient-balance");
@@ -193,24 +221,36 @@ contract Core is DSMath {
         emit BurnZero(usr, class_, maturity, bal_);
     }
 
+    /// Mints claim balance
+    /// @param usr User address
+    /// @param issuance Issuance timestamp of claim balance to derive its class
+    /// @param maturity Maturity timestamp of claim balance to derive its class
+    /// @param bal_ Claim balance amount
     function mintClaim(
         address usr,
         uint256 issuance,
         uint256 maturity,
         uint256 bal_
     ) internal {
+        // calculate claim class with both issuance and maturity timestamps
         bytes32 class_ = keccak256(abi.encodePacked(issuance, maturity));
 
         cBal[usr][class_] = addu(cBal[usr][class_], bal_);
         emit MintClaim(usr, class_, issuance, maturity, bal_);
     }
 
+    /// Burns claim balance
+    /// @param usr User address
+    /// @param issuance Issuance timestamp of claim balance to derive its class
+    /// @param maturity Maturity timestamp of claim balance to derive its class
+    /// @param bal_ Claim balance amount
     function burnClaim(
         address usr,
         uint256 issuance,
         uint256 maturity,
         uint256 bal_
     ) internal {
+        // calculate claim class with both issuance and maturity timestamps
         bytes32 class_ = keccak256(abi.encodePacked(issuance, maturity));
 
         require(cBal[usr][class_] >= bal_, "cBal/insufficient-balance");
@@ -220,11 +260,21 @@ contract Core is DSMath {
     }
 
     // --- Governance Functions ---
+
+    /// Updates governance
+    /// @dev restricted to be executed only by current governance
+    /// @param newGov New address to be set as governance
     function updateGov(address newGov) public onlyGov {
         gov = newGov;
     }
 
     // --- Transfer Functions ---
+
+    /// Transfers user's zero balance
+    /// @param src Source address to transfer balance from
+    /// @param dst Destination address to transfer balance to
+    /// @param class_ Zero balance class
+    /// @param bal_ Zero balance amount to transfer
     function moveZero(
         address src,
         address dst,
@@ -239,6 +289,12 @@ contract Core is DSMath {
         emit MoveZero(src, dst, class_, bal_);
     }
 
+    /// Transfers user's claim balance
+    /// @param src Source address to transfer balance from
+    /// @param dst Destination address to transfer balance to
+    /// @param class_ Claim balance class
+    /// @param bal_ Claim balance amount to transfer
+    /// @dev Can transfer both activated and unactivated (future portion after slice) claim balances
     function moveClaim(
         address src,
         address dst,
@@ -254,12 +310,21 @@ contract Core is DSMath {
     }
 
     // --- Frac Functions ---
-    // function snapshot() external {
-    //     // allow anyone to snapshot frac value from on-chain when available
-    // }
 
+    /// Snapshots fraction value of a yield token in a trustless manner for current timestamp
+    /// @dev Has to be a public function
+    /// @dev Can skip implementation if governance will handle inserting all required fraction values
+    /* solhint-disable no-empty-blocks */
+    function snapshot() external {
+        // allow anyone to snapshot frac value from on-chain when available
+    }
+
+    /// Governance inserts a fraction value at a timestamp
+    /// @dev Can be executed after close but timestamp cannot fall before close timestamp
+    /// @dev Update require statements based on needs of the yield token integration
     function insert(uint256 t, uint256 frac_) external onlyGov untilClose(t) {
         // governance calculates frac value from pricePerShare
+        // ex: pricePerShare: 1.25, frac: 1/1.25 = 0.80
         require(frac_ <= WAD, "frac/above-one"); // should be 1 wad or below
         require(frac[t] == 0, "frac/overwrite-disabled"); // overwriting frac value disabled
         require(t <= block.timestamp, "frac/future-timestamp"); // cant insert at a future timestamp
@@ -275,6 +340,12 @@ contract Core is DSMath {
     }
 
     // --- Zero and Claim Functions ---
+    /// Issues zero and claim balances in exchange for yield token balance
+    /// @param usr User address
+    /// @param issuance Issuance timestamp set for claim balance
+    /// @param maturity Maturity timestamp set for zero and claim balances
+    /// @param tbal_ Yield token amount transferred to deco for issuance
+    /// @dev tbal_ amount has same number of decimals as the yield token
     function issue(
         address usr,
         uint256 issuance,
@@ -286,7 +357,7 @@ contract Core is DSMath {
             issuance <= latestFracTimestamp && latestFracTimestamp <= maturity,
             "timestamp/invalid"
         );
-        // frac value should exist at issuance, take snapshot prior to calling issuance if it is at now
+        // frac value should exist at issuance, take snapshot prior to calling issuance if it is at current timestamp
         require(frac[issuance] != 0, "frac/invalid");
 
         // lock tbal_ token balance and receive bal_ notional amount of zero and claim
@@ -297,6 +368,10 @@ contract Core is DSMath {
         mintClaim(usr, issuance, maturity, bal_);
     }
 
+    /// Withdraws zero and claim balances before their maturity
+    /// @param usr User address
+    /// @param maturity Maturity timestamp of both zero and claim balances
+    /// @param bal_ Zero and claim balance amounts need to be equal
     function withdraw(
         address usr,
         uint256 maturity,
@@ -304,15 +379,22 @@ contract Core is DSMath {
     ) external approved(usr) untilClose(latestFracTimestamp) {
         uint256 latestFrac = frac[latestFracTimestamp]; // frac value at latest timestamp
 
-        // burn same notional amount of zero and claim
+        // burn equal amount of zero and claim balances
         burnZero(usr, maturity, bal_);
         // cannot burn if claim is not fully collected until latest frac timestamp
         burnClaim(usr, latestFracTimestamp, maturity, bal_);
 
-        unlock(usr, latestFrac, bal_); // transfer token to usr
+        unlock(usr, latestFrac, bal_); // transfer yield token to usr before maturity
     }
 
     // --- Zero Functions ---
+
+    /// Redeems a zero balance after maturity
+    /// @param usr User address
+    /// @param maturity Maturity timestamp
+    /// @param collect_ Collect timestamp to pass the zero holder additional yield earnt
+    /// @param bal_ Zero balance amount
+    /// @dev Redeemption of zero does not lose yield that the redeemable amount can earn starting at maturity
     function redeem(
         address usr,
         uint256 maturity,
@@ -329,10 +411,18 @@ contract Core is DSMath {
         require(collectFrac != 0, "frac/invalid"); // ensure collect frac value is valid
 
         burnZero(usr, maturity, bal_); // burn zero balance
-        unlock(usr, collectFrac, bal_); // transfer token balance
+        unlock(usr, collectFrac, bal_); // transfer yield token balance
     }
 
     // --- Claim Functions ---
+
+    /// Collects yield earned by a claim balance
+    /// @param usr User address
+    /// @param issuance Issuance timestamp with a fraction value present
+    /// @param maturity Maturity timestamp
+    /// @param collect_ Collect timestamp to claim yield earned until collect
+    /// @param bal_ Claim balance amount
+    /// @dev Collect can be executed any number of times between issuance and maturity for yield earned so far
     function collect(
         address usr,
         uint256 issuance,
@@ -349,19 +439,28 @@ contract Core is DSMath {
         uint256 issuanceFrac = frac[issuance]; // frac value at issuance timestamp
         uint256 collectFrac = frac[collect_]; // frac value at collect timestamp
 
-        require(issuanceFrac != 0, "frac/invalid"); // issuance frac value cannot be 0
+        // issuance frac value cannot be 0
+        // sliced claim balances in this situation can use activate to move issuance to timestamp with frac value      
+        require(issuanceFrac != 0, "frac/invalid");
         require(collectFrac != 0, "frac/invalid"); // collect frac value cannot be 0
 
         require(issuanceFrac > collectFrac, "frac/no-difference"); // frac difference should be present
 
-        burnClaim(usr, issuance, maturity, bal_); // burn entire claim balance
-        // mint new claim balance for remaining time period between collect and maturity
+        burnClaim(usr, issuance, maturity, bal_); // burn current claim balance
+        // mint new claim balance to collect yield earned later for remaining time period between collect and maturity
         if (collect_ != maturity) {
             mintClaim(usr, collect_, maturity, bal_);
         }
         unlock(usr, subu(issuanceFrac, collectFrac), bal_); // transfer token balance for collect amount
     }
 
+    /// Rewinds issuance of claim balance back to a past timestamp
+    /// @param usr User address
+    /// @param issuance Issuance timestamp
+    /// @param maturity Maturity timestamp
+    /// @param collect_ Collect timestamp in the past with a fraction value
+    /// @param bal_ Claim balance amount
+    /// @dev Rewind also transfers an additional yield token amount from user to Deco to offset its loss
     function rewind(
         address usr,
         uint256 issuance,
@@ -392,6 +491,14 @@ contract Core is DSMath {
     }
 
     // ---  Future Claim Functions ---
+    /// Slices one claim balance into two claim balances at a timestamp
+    /// @param usr User address
+    /// @param t1 Issuance timestamp
+    /// @param t2 Slice point timestamp
+    /// @param t3 Maturity timestamp
+    /// @param bal_ Claim balance amount
+    /// @dev Slice issues two new claim balances, one of which needs to be activated 
+    /// @dev in the future at a timestamp with a frac value when one is not present
     function slice(
         address usr,
         uint256 t1,
@@ -399,9 +506,6 @@ contract Core is DSMath {
         uint256 t3,
         uint256 bal_
     ) external approved(usr) {
-        // t1 - issuance
-        // t2 - slice point
-        // t3 - maturity
         require(t1 < t2 && t2 < t3, "timestamp/invalid"); // timestamp t2 needs to be between t1 and t3
 
         burnClaim(usr, t1, t3, bal_); // burn original claim balance
@@ -409,6 +513,12 @@ contract Core is DSMath {
         mintClaim(usr, t2, t3, bal_); // mint claim balance to be activated later at t2
     }
 
+    /// Merges two claim balances with contiguous time periods into one claim balance
+    /// @param usr User address
+    /// @param t1 Issuance timestamp of first
+    /// @param t2 Merge timestamp- maturity timestamp of first and issuance timestamp of second
+    /// @param t3 Maturity timestamp of second
+    /// @param bal_ Claim balance amount
     function merge(
         address usr,
         uint256 t1,
@@ -416,10 +526,6 @@ contract Core is DSMath {
         uint256 t3,
         uint256 bal_
     ) external approved(usr) {
-        // t1 - issuance
-        // t2 - merge point, maturity and issuance
-        // t3 - maturity
-
         require(t1 < t2 && t2 < t3, "timestamp/invalid"); // timestamp t2 needs to be between t1 and t3
 
         burnClaim(usr, t1, t2, bal_); // burn first claim balance
@@ -427,6 +533,13 @@ contract Core is DSMath {
         mintClaim(usr, t1, t3, bal_); // mint whole
     }
 
+    /// Activates a balance whose issuance timestamp does not have a fraction value set
+    /// @param usr User address
+    /// @param t1 Issuance timestamp without a fraction value
+    /// @param t2 Activation timestamp with a fraction value set
+    /// @param t3 Maturity timestamp
+    /// @param bal_ Claim balance amount
+    /// @dev Yield earnt between issuance and activation becomes uncollectable and is permanently lost
     function activate(
         address usr,
         uint256 t1,
@@ -434,25 +547,30 @@ contract Core is DSMath {
         uint256 t3,
         uint256 bal_
     ) external approved(usr) untilClose(t3) {
-        // t1 - issuance
-        // t2 - activation point with available frac value
-        // t3 - maturity
         require(t1 < t2 && t2 < t3, "timestamp/invalid"); // all timestamps are in order
 
         require(frac[t1] == 0, "frac/valid"); // frac value should be missing at issuance
         require(frac[t2] != 0, "frac/invalid"); // valid frac value required to activate
 
         burnClaim(usr, t1, t3, bal_); // burn inactive claim balance
-        mintClaim(usr, t2, t3, bal_); // mint claim balance
-        // yield earnt between t2 to t3 becomes uncollectable
+        mintClaim(usr, t2, t3, bal_); // mint active claim balance
     }
 
     // --- Governance ---
+
+    /// Closes this deco instance
+    /// @dev Close timestamp automatically set to the latest fraction value captured when close is executed
+    /// @dev Setup close trigger conditions and control based on the requirements of the yield token integration
     function close() external onlyGov {
         require(closeTimestamp == uint256(-1), "closed"); // can be closed only once
         closeTimestamp = latestFracTimestamp; // set close timestamp to last known frac value
     }
 
+    /// Stores a ratio value
+    /// @param maturity Maturity timestamp to set ratio for
+    /// @param ratio_ Ratio value
+    /// @dev Yield token balance split ratio is applied to zero and claim balances with maturity after close timestamp
+    /// @dev Setup a valuation calculation internally to calculate ratio if possible
     function calculate(uint256 maturity, uint256 ratio_)
         public
         onlyGov
@@ -467,6 +585,10 @@ contract Core is DSMath {
     }
 
     // --- Zero and Claim Cash Out Functions ---
+
+    /// Determines value of zero with maturity after close timestamp
+    /// @param maturity Maturity timestamp of zero balance
+    /// @param bal_ Balance amount
     function zero(uint256 maturity, uint256 bal_)
         public
         view
@@ -477,6 +599,10 @@ contract Core is DSMath {
         return wmul(bal_, ratio[maturity]); // yield token value of notional amount in zero
     }
 
+    /// Determines value of claim with maturity after close timestamp
+    /// @param maturity Maturity timestamp of claim balance
+    /// @param bal_ Balance amount
+    /// @dev Issuance of claim needs to be at the close timestamp, which means it has collected yield earned until then
     function claim(uint256 maturity, uint256 bal_)
         public
         view
@@ -487,6 +613,10 @@ contract Core is DSMath {
         return wmul(bal_, subu(WAD, ratio[maturity])); // yield token value of notional amount in claim
     }
 
+    /// Exchanges a zero balance with maturity after close timestamp for a yield token balance
+    /// @param usr User address
+    /// @param maturity Maturity timestamp
+    /// @param bal_ Balance amount
     function cashZero(
         address usr,
         uint256 maturity,
@@ -496,6 +626,12 @@ contract Core is DSMath {
         unlock(usr, frac[closeTimestamp], zero(maturity, bal_)); // transfer yield token to user
     }
 
+    /// Exchanges a claim balance with maturity after close timestamp for a yield token balance
+    /// @param usr User address
+    /// @param maturity Maturity timestamp
+    /// @param bal_ Balance amount
+    /// @dev Issuance of claim needs to be at the close timestamp, which means it has collected yield earned until then 
+    /// @dev Any sliced claim balances need to be merged back or they will be permanently locked
     function cashClaim(
         address usr,
         uint256 maturity,
