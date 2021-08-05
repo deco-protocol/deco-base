@@ -1,7 +1,7 @@
 {
-  "name": "deco-yearn",
+  "name": "deco-base",
   "version": "1.0.0",
-  "description": "deco yearn",
+  "description": "deco base",
   "main": "dist",
   "types": "dist/types",
   "files": [
