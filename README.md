@@ -2,7 +2,7 @@
 
 Deco is a simple and flexible protocol that can be attached to any yield protocol to decompose its yield token into zero-yield and pure-yield fixed-term assets: zeros and claims. Zero holders receive a fixed savings rate over a fixed term, and Claim holders take on the risk of rate volatility.
 
-*Please refer to the [technical documentation](https://docs/deco.money) for information about the core protocol.*
+*Please refer to the [technical documentation](https://docs.deco.money) for information about the core protocol.*
 
 ## Base Repo
 
